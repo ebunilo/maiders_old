@@ -25,9 +25,11 @@ _ROLE_PREFIXES = {
 }
 
 
-def path_allowed(role: str, path: str) -> bool:
+def path_allowed(role: str, path: str, method: str = "GET") -> bool:
     """Admins (or any unrecognized role prefix set) get everything; the
-    other roles only get their own prefixes."""
+    other roles only get their own prefixes, and only admins may delete."""
+    if method == "DELETE" and role != ADMIN:
+        return False
     if role == ADMIN:
         return True
     prefixes = _ROLE_PREFIXES.get(role, ())

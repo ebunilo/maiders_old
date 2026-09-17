@@ -18,6 +18,7 @@
     </tr>
   </thead>
   <tbody>
+  {% set is_admin = request.session.get('role', 'admin') == 'admin' %}
   {% for t, s in rows %}
     <tr id="supplier-row-{{ t.id }}">
       <td>{{ t.date_posted }}</td>
@@ -28,6 +29,7 @@
       <td class="text-end amount-dr">{% if t.amount_dr %}₦{{ t.amount_dr | money }}{% endif %}</td>
       <td class="text-end amount-cr">{% if t.amount_cr %}₦{{ t.amount_cr | money }}{% endif %}</td>
       <td class="text-end">
+        {% if is_admin %}
         <button
           class="btn btn-sm btn-outline-danger"
           hx-delete="/supplier-transactions/{{ t.id }}"
@@ -35,6 +37,7 @@
           hx-swap="outerHTML"
           hx-confirm="Delete this transaction?"
         >Delete</button>
+        {% endif %}
       </td>
     </tr>
   {% else %}

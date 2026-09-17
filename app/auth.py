@@ -26,7 +26,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return RedirectResponse(url=f"/login?next={path}{query}", status_code=303)
 
         role = request.session.get("role", ADMIN)
-        if path_allowed(role, path):
+        if path_allowed(role, path, request.method):
             return await call_next(request)
 
         home = home_for(role)
