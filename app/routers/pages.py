@@ -1,13 +1,16 @@
 import datetime
 import math
+from io import BytesIO
+from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app import crud, schemas
 from app.database import get_db
+from app.pdf import build_customer_ledger_pdf
 
 router = APIRouter(tags=["pages"])
 templates = Jinja2Templates(directory="app/templates")
@@ -92,6 +95,8 @@ def customer_detail(
     db: Session = Depends(get_db),
 ):
     customer = crud.get_customer(db, customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
     balance = crud.get_customer_balance(db, customer_id)
     page_size = 30
     rows, total = crud.list_transactions_for_customer(
@@ -104,6 +109,14 @@ def customer_detail(
         page_size=page_size,
     )
     form_ids = crud.list_form_ids(db)
+    pdf_query = {
+        k: v
+        for k, v in {"date_from": date_from, "date_to": date_to, "form_id": form_id}.items()
+        if v
+    }
+    pdf_url = f"/customers/{customer_id}/ledger.pdf"
+    if pdf_query:
+        pdf_url += f"?{urlencode(pdf_query)}"
     ctx = {
         "customer": customer,
         "balance": balance,
@@ -114,12 +127,44 @@ def customer_detail(
             "date_to": date_to or "",
             "form_id": form_id or "",
         },
+        "pdf_url": pdf_url,
         "pagination": _pagination(total, page, page_size),
         "active": "customers",
     }
     if request.headers.get("HX-Request"):
         return templates.TemplateResponse(request, "partials/statement_table.html", ctx)
     return templates.TemplateResponse(request, "customer_detail.html", ctx)
+
+
+@router.get("/customers/{customer_id}/ledger.pdf")
+def customer_ledger_pdf(
+    customer_id: int,
+    date_from: datetime.date | None = None,
+    date_to: datetime.date | None = None,
+    form_id: str | None = None,
+    db: Session = Depends(get_db),
+):
+    customer = crud.get_customer(db, customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    balance = crud.get_customer_balance(db, customer_id)
+    rows = crud.get_full_customer_statement(
+        db, customer_id, date_from=date_from, date_to=date_to, form_id=form_id
+    )
+    pdf_bytes = build_customer_ledger_pdf(
+        customer,
+        balance,
+        rows,
+        {"date_from": date_from, "date_to": date_to, "form_id": form_id},
+        datetime.datetime.now(),
+    )
+    safe_code = "".join(c if c.isalnum() else "_" for c in customer.code).strip("_")
+    filename = f"ledger_{safe_code}_{datetime.date.today().isoformat()}.pdf"
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
 
 
 @router.get("/transactions", response_class=HTMLResponse)

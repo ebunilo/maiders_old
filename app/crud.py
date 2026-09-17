@@ -99,15 +99,15 @@ def get_customer_balance(db: Session, customer_id: int) -> dict:
     }
 
 
-def list_transactions_for_customer(
+def get_full_customer_statement(
     db: Session,
     customer_id: int,
     date_from: datetime.date | None = None,
     date_to: datetime.date | None = None,
     form_id: str | None = None,
-    page: int = 1,
-    page_size: int = PAGE_SIZE_DEFAULT,
-):
+) -> list[tuple[models.Transaction, Decimal]]:
+    """All matching transactions for a customer, in chronological order,
+    paired with the running balance after each one."""
     stmt = select(models.Transaction).where(models.Transaction.customer_id == customer_id)
     if date_from:
         stmt = stmt.where(models.Transaction.date_posted >= date_from)
@@ -115,8 +115,6 @@ def list_transactions_for_customer(
         stmt = stmt.where(models.Transaction.date_posted <= date_to)
     if form_id:
         stmt = stmt.where(models.Transaction.form_id == form_id)
-
-    total = db.scalar(select(func.count()).select_from(stmt.subquery()))
 
     ordered = stmt.order_by(models.Transaction.date_posted, models.Transaction.id)
     all_rows = db.scalars(ordered).all()
@@ -126,7 +124,22 @@ def list_transactions_for_customer(
     for t in all_rows:
         running += (t.amount_dr or 0) - (t.amount_cr or 0)
         with_balance.append((t, running))
+    return with_balance
 
+
+def list_transactions_for_customer(
+    db: Session,
+    customer_id: int,
+    date_from: datetime.date | None = None,
+    date_to: datetime.date | None = None,
+    form_id: str | None = None,
+    page: int = 1,
+    page_size: int = PAGE_SIZE_DEFAULT,
+):
+    with_balance = get_full_customer_statement(
+        db, customer_id, date_from=date_from, date_to=date_to, form_id=form_id
+    )
+    total = len(with_balance)
     start = (page - 1) * page_size
     end = start + page_size
     page_rows = with_balance[start:end]
