@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{{ supplier.name }} - Ledger{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-3">
+  <div>
+    <h3 class="mb-0">{{ supplier.name }}</h3>
+    <div class="text-muted small">Code: {{ supplier.code }}</div>
+    <a
+      class="btn btn-sm btn-outline-dark mt-2"
+      href="{{ pdf_url }}"
+      target="_blank"
+      rel="noopener"
+      onclick="this.href = '/suppliers/{{ supplier.id }}/ledger.pdf' + window.location.search"
+    >Download / Print PDF</a>
+  </div>
+  <div class="d-flex gap-3">
+    <div class="card kpi-card p-2 px-3 text-center">
+      <div class="text-muted small">Total Dr</div>
+      <div class="fw-bold amount-dr">₦{{ balance.total_dr | money }}</div>
+    </div>
+    <div class="card kpi-card p-2 px-3 text-center">
+      <div class="text-muted small">Total Cr</div>
+      <div class="fw-bold amount-cr">₦{{ balance.total_cr | money }}</div>
+    </div>
+    <div class="card kpi-card p-2 px-3 text-center">
+      <div class="text-muted small">Balance (We Owe)</div>
+      <div class="fw-bold {% if balance.balance >= 0 %}balance-positive{% else %}balance-negative{% endif %}">
+        ₦{{ balance.balance | money }}
+      </div>
+    </div>
+  </div>
+</div>
+
+<form class="row g-2 mb-3" hx-get="/suppliers/{{ supplier.id }}" hx-target="#results" hx-push-url="true">
+  <div class="col-auto">
+    <input type="date" class="form-control form-control-sm" name="date_from" value="{{ filters.date_from }}">
+  </div>
+  <div class="col-auto">
+    <input type="date" class="form-control form-control-sm" name="date_to" value="{{ filters.date_to }}">
+  </div>
+  <div class="col-auto">
+    <select class="form-select form-select-sm" name="form_id">
+      <option value="">All types</option>
+      {% for f in form_ids %}
+        <option value="{{ f }}" {% if filters.form_id == f %}selected{% endif %}>{{ f }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto">
+    <button class="btn btn-sm btn-primary" type="submit">Filter</button>
+  </div>
+  <div class="col-auto ms-auto">
+    <a class="btn btn-sm btn-outline-secondary" href="/suppliers">&larr; Back to suppliers</a>
+  </div>
+</form>
+
+<div id="results">
+  {% include "partials/supplier_statement_table.html" %}
+</div>
+{% endblock %}

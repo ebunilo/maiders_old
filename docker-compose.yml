@@ -32,7 +32,7 @@ services:
       db:
         condition: service_healthy
 
-  # One-off data loader. Not started by `docker compose up`; run explicitly:
+  # One-off data loaders. Not started by `docker compose up`; run explicitly:
   #   docker compose run --rm import
   #   docker compose run --rm import python -m scripts.import_csv "Customer Transactions_114458.csv" --reset
   import:
@@ -44,6 +44,20 @@ services:
       db:
         condition: service_healthy
     command: ["python", "-m", "scripts.import_csv", "Customer Transactions_114458.csv"]
+
+  # Same, but for supplier data -- a separate table set, so it's a separate
+  # one-off loader:
+  #   docker compose run --rm import-suppliers
+  #   docker compose run --rm import-suppliers python -m scripts.import_supplier_csv "Supplier Ledger_114158.csv" --reset
+  import-suppliers:
+    build: .
+    profiles: ["tools"]
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-maiders}:${POSTGRES_PASSWORD:-maiders}@db:5432/${POSTGRES_DB:-maiders}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["python", "-m", "scripts.import_supplier_csv", "Supplier Ledger_114158.csv"]
 
 volumes:
   maiders_pgdata:

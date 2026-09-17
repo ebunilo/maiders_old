@@ -1,0 +1,15 @@
+{% if query %}
+<div class="list-group shadow-sm">
+  {% for s in matches %}
+  <button
+    type="button"
+    class="list-group-item list-group-item-action py-1 px-2 small"
+    data-supplier-id="{{ s.id }}"
+    data-supplier-name="{{ s.name }}"
+    onclick="selectTxnSupplier(this.dataset.supplierId, this.dataset.supplierName)"
+  >{{ s.name }} <span class="text-muted">({{ s.code }})</span></button>
+  {% else %}
+  <div class="list-group-item py-1 px-2 small text-muted">No match — a new supplier will be created.</div>
+  {% endfor %}
+</div>
+{% endif %}

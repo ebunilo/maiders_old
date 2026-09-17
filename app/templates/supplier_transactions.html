@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Supplier Transactions - Ledger{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Supplier Transactions</h3>
+  <button
+    class="btn btn-primary btn-sm"
+    data-bs-toggle="modal"
+    data-bs-target="#supplierTxnModal"
+    hx-get="/supplier-transactions/new"
+    hx-target="#supplierTxnModalContent"
+  >+ Add Supplier Transaction</button>
+</div>
+
+<form class="row g-2 mb-3" hx-get="/supplier-transactions" hx-target="#results" hx-push-url="true">
+  <div class="col-auto">
+    <input
+      type="search"
+      class="form-control form-control-sm"
+      name="search"
+      placeholder="Search details, supplier, item..."
+      value="{{ filters.search }}"
+      style="min-width: 260px"
+    >
+  </div>
+  <div class="col-auto">
+    <input type="date" class="form-control form-control-sm" name="date_from" value="{{ filters.date_from }}">
+  </div>
+  <div class="col-auto">
+    <input type="date" class="form-control form-control-sm" name="date_to" value="{{ filters.date_to }}">
+  </div>
+  <div class="col-auto">
+    <select class="form-select form-select-sm" name="form_id">
+      <option value="">All types</option>
+      {% for f in form_ids %}
+        <option value="{{ f }}" {% if filters.form_id == f %}selected{% endif %}>{{ f }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto">
+    <button class="btn btn-sm btn-primary" type="submit">Filter</button>
+  </div>
+</form>
+
+<div id="results">
+  {% include "partials/supplier_transactions_table.html" %}
+</div>
+
+<div class="modal fade" id="supplierTxnModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content" id="supplierTxnModalContent">
+      <!-- loaded via htmx -->
+    </div>
+  </div>
+</div>
+{% endblock %}

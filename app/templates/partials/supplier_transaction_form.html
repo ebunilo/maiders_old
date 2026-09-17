@@ -1,0 +1,143 @@
+<div class="modal-header">
+  <h5 class="modal-title">Add Supplier Transaction</h5>
+  <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+<form hx-post="/supplier-transactions/new" hx-target="#results" hx-swap="innerHTML">
+  <div class="modal-body">
+    <div class="row g-2">
+      <div class="col-12 position-relative">
+        <label class="form-label small">Supplier Name</label>
+        <input
+          class="form-control form-control-sm"
+          id="txn-supplier-name"
+          name="supplier_name"
+          autocomplete="off"
+          required
+          hx-get="/supplier-transactions/supplier-lookup"
+          hx-trigger="input changed delay:250ms"
+          hx-target="#txn-supplier-suggestions"
+          hx-swap="innerHTML"
+          oninput="document.getElementById('txn-supplier-id').value=''"
+          onblur="setTimeout(() => document.getElementById('txn-supplier-suggestions').innerHTML='', 200)"
+        >
+        <input type="hidden" id="txn-supplier-id" name="supplier_id">
+        <div id="txn-supplier-suggestions" class="position-absolute w-100" style="z-index: 1056;"></div>
+      </div>
+      <div class="col-6">
+        <label class="form-label small">Date</label>
+        <input type="date" class="form-control form-control-sm" name="date_posted" required value="{{ today }}">
+      </div>
+      <div class="col-12">
+        <label class="form-label small">Details</label>
+        <input class="form-control form-control-sm" name="details">
+      </div>
+      <div class="col-6">
+        <label class="form-label small">Amount Debit (Goods Received)</label>
+        <input
+          type="text"
+          inputmode="decimal"
+          class="form-control form-control-sm"
+          data-target="txn-amount-dr"
+          oninput="formatTxnAmountInput(this)"
+        >
+        <input type="hidden" id="txn-amount-dr" name="amount_dr" value="0">
+      </div>
+      <div class="col-6">
+        <label class="form-label small">Amount Credit (Payment Made)</label>
+        <input
+          type="text"
+          inputmode="decimal"
+          class="form-control form-control-sm"
+          data-target="txn-amount-cr"
+          oninput="formatTxnAmountInput(this)"
+        >
+        <input type="hidden" id="txn-amount-cr" name="amount_cr" value="0">
+      </div>
+      <div class="col-6">
+        <label class="form-label small">Payment Mode</label>
+        <input class="form-control form-control-sm" name="payment_mode">
+      </div>
+      <div class="col-6">
+        <label class="form-label small">Account Used</label>
+        <input class="form-control form-control-sm" name="account_used">
+      </div>
+      <div class="col-6">
+        <label class="form-label small">Item Name</label>
+        <input class="form-control form-control-sm" name="item_name">
+      </div>
+      <div class="col-3">
+        <label class="form-label small">Quantity</label>
+        <input type="number" step="0.001" class="form-control form-control-sm" name="quantity">
+      </div>
+      <div class="col-3">
+        <label class="form-label small">Measures</label>
+        <input class="form-control form-control-sm" name="measures" placeholder="e.g. Tons">
+      </div>
+      <div class="col-6">
+        <label class="form-label small">Unit Cost</label>
+        <input type="number" step="0.01" class="form-control form-control-sm" name="unit_cost">
+      </div>
+      <div class="col-6">
+        <label class="form-label small">Vehicle No</label>
+        <input class="form-control form-control-sm" name="vehicle_no">
+      </div>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+    <button type="submit" class="btn btn-primary btn-sm" data-bs-dismiss="modal">Save Transaction</button>
+  </div>
+</form>
+<script>
+  function selectTxnSupplier(id, name) {
+    document.getElementById('txn-supplier-name').value = name;
+    document.getElementById('txn-supplier-id').value = id;
+    document.getElementById('txn-supplier-suggestions').innerHTML = '';
+  }
+
+  function formatTxnAmountInput(input) {
+    const hidden = document.getElementById(input.dataset.target);
+
+    // Remember how many digit/decimal-point characters sit before the
+    // cursor so it can be restored at the same spot after re-inserting
+    // thousands separators (which shift everything after them).
+    const prevCursor = input.selectionStart;
+    const digitsBeforeCursor = input.value.slice(0, prevCursor).replace(/[^\d.]/g, '').length;
+
+    let digits = input.value.replace(/[^\d.]/g, '');
+    const firstDot = digits.indexOf('.');
+    if (firstDot !== -1) {
+      digits = digits.slice(0, firstDot + 1) + digits.slice(firstDot + 1).replace(/\./g, '');
+    }
+
+    if (digits === '') {
+      input.value = '';
+      hidden.value = '0';
+      return;
+    }
+
+    let [intPart, decPart] = digits.split('.');
+    intPart = intPart.replace(/^0+(?=\d)/, '') || '0';
+    const intFormatted = Number(intPart).toLocaleString('en-US');
+
+    if (decPart !== undefined) {
+      decPart = decPart.slice(0, 2);
+      input.value = intFormatted + '.' + decPart;
+      hidden.value = intPart + '.' + decPart.padEnd(2, '0');
+    } else {
+      input.value = intFormatted;
+      hidden.value = intPart;
+    }
+
+    let seen = 0;
+    let cursor = input.value.length;
+    for (let i = 0; i < input.value.length; i++) {
+      if (/[\d.]/.test(input.value[i])) seen++;
+      if (seen >= digitsBeforeCursor) {
+        cursor = i + 1;
+        break;
+      }
+    }
+    input.setSelectionRange(cursor, cursor);
+  }
+</script>

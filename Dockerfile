@@ -16,7 +16,7 @@ RUN pip install -r requirements.txt
 
 COPY app ./app
 COPY scripts ./scripts
-COPY ["Customer Transactions_114458.csv", "./"]
+COPY ["Customer Transactions_114458.csv", "Supplier Ledger_114158.csv", "./"]
 
 RUN useradd --create-home --uid 1000 appuser && chown -R appuser:appuser /app
 USER appuser

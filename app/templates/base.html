@@ -30,6 +30,12 @@
           <li class="nav-item">
             <a class="nav-link {% if active == 'transactions' %}active fw-bold{% endif %}" href="/transactions">Transactions</a>
           </li>
+          <li class="nav-item">
+            <a class="nav-link {% if active == 'suppliers' %}active fw-bold{% endif %}" href="/suppliers">Suppliers</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link {% if active == 'supplier_transactions' %}active fw-bold{% endif %}" href="/supplier-transactions">Supplier Transactions</a>
+          </li>
         </ul>
         <span class="navbar-text text-light me-3 small">{{ request.session.get('username', '') }}</span>
         <a class="btn btn-outline-light btn-sm" href="/logout">Logout</a>

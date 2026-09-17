@@ -1,0 +1,36 @@
+<table class="table table-sm table-hover bg-white">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Details</th>
+      <th>Form</th>
+      <th>Item</th>
+      <th>Payment / Account</th>
+      <th class="text-end">Debit</th>
+      <th class="text-end">Credit</th>
+      <th class="text-end">Balance</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for t, running in rows %}
+    <tr>
+      <td>{{ t.date_posted }}</td>
+      <td>{{ t.details }}</td>
+      <td><span class="badge text-bg-secondary">{{ t.form_id or '-' }}</span></td>
+      <td class="small text-muted">
+        {% if t.item_name %}{{ t.item_name }}{% if t.quantity %} ({{ t.quantity }} {{ t.measures or '' }}){% endif %}{% else %}{{ t.vehicle_no or '-' }}{% endif %}
+      </td>
+      <td class="small">{{ t.payment_mode or '-' }}{% if t.account_used %} / {{ t.account_used }}{% endif %}</td>
+      <td class="text-end amount-dr">{% if t.amount_dr %}₦{{ t.amount_dr | money }}{% endif %}</td>
+      <td class="text-end amount-cr">{% if t.amount_cr %}₦{{ t.amount_cr | money }}{% endif %}</td>
+      <td class="text-end {% if running >= 0 %}balance-positive{% else %}balance-negative{% endif %}">
+        ₦{{ running | money }}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="8" class="text-center text-muted py-4">No transactions found.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% include "partials/pagination.html" with context %}

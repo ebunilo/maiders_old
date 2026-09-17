@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app import crud, schemas
 from app.database import get_db
-from app.pdf import build_customer_ledger_pdf
+from app.pdf import build_customer_ledger_pdf, build_supplier_ledger_pdf
 
 router = APIRouter(tags=["pages"])
 templates = Jinja2Templates(directory="app/templates")
@@ -52,6 +52,15 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         {"month": m.strftime("%b %Y"), "total_dr": float(dr), "total_cr": float(cr)}
         for m, dr, cr in monthly
     ]
+
+    supplier_summary = crud.get_supplier_dashboard_summary(db)
+    top_creditors = crud.get_top_creditors(db, limit=10)
+    supplier_monthly = crud.get_supplier_monthly_totals(db, months=12)
+    supplier_monthly_data = [
+        {"month": m.strftime("%b %Y"), "total_dr": float(dr), "total_cr": float(cr)}
+        for m, dr, cr in supplier_monthly
+    ]
+
     return templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -59,6 +68,9 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
             "summary": summary,
             "top_debtors": top_debtors,
             "monthly_data": monthly_data,
+            "supplier_summary": supplier_summary,
+            "top_creditors": top_creditors,
+            "supplier_monthly_data": supplier_monthly_data,
             "active": "dashboard",
         },
     )
@@ -273,4 +285,232 @@ def delete_transaction_from_ui(transaction_id: int, request: Request, db: Sessio
     txn = crud.get_transaction(db, transaction_id)
     if txn:
         crud.delete_transaction(db, txn)
+    return HTMLResponse("")
+
+
+# --- Suppliers ---------------------------------------------------------
+
+
+@router.get("/suppliers", response_class=HTMLResponse)
+def suppliers_page(
+    request: Request,
+    search: str | None = None,
+    page: int = 1,
+    db: Session = Depends(get_db),
+):
+    page_size = 25
+    results, total = crud.list_suppliers(db, search=search, page=page, page_size=page_size)
+    ctx = {
+        "suppliers": results,
+        "search": search or "",
+        "pagination": _pagination(total, page, page_size),
+        "active": "suppliers",
+    }
+    if request.headers.get("HX-Request"):
+        return templates.TemplateResponse(request, "partials/suppliers_table.html", ctx)
+    return templates.TemplateResponse(request, "suppliers.html", ctx)
+
+
+@router.get("/suppliers/{supplier_id}", response_class=HTMLResponse)
+def supplier_detail(
+    supplier_id: int,
+    request: Request,
+    date_from: datetime.date | None = None,
+    date_to: datetime.date | None = None,
+    form_id: str | None = None,
+    page: int = 1,
+    db: Session = Depends(get_db),
+):
+    supplier = crud.get_supplier(db, supplier_id)
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    balance = crud.get_supplier_balance(db, supplier_id)
+    page_size = 30
+    rows, total = crud.list_supplier_transactions_for_supplier(
+        db,
+        supplier_id,
+        date_from=date_from,
+        date_to=date_to,
+        form_id=form_id,
+        page=page,
+        page_size=page_size,
+    )
+    form_ids = crud.list_supplier_form_ids(db)
+    pdf_query = {
+        k: v
+        for k, v in {"date_from": date_from, "date_to": date_to, "form_id": form_id}.items()
+        if v
+    }
+    pdf_url = f"/suppliers/{supplier_id}/ledger.pdf"
+    if pdf_query:
+        pdf_url += f"?{urlencode(pdf_query)}"
+    ctx = {
+        "supplier": supplier,
+        "balance": balance,
+        "rows": rows,
+        "form_ids": form_ids,
+        "filters": {
+            "date_from": date_from or "",
+            "date_to": date_to or "",
+            "form_id": form_id or "",
+        },
+        "pdf_url": pdf_url,
+        "pagination": _pagination(total, page, page_size),
+        "active": "suppliers",
+    }
+    if request.headers.get("HX-Request"):
+        return templates.TemplateResponse(request, "partials/supplier_statement_table.html", ctx)
+    return templates.TemplateResponse(request, "supplier_detail.html", ctx)
+
+
+@router.get("/suppliers/{supplier_id}/ledger.pdf")
+def supplier_ledger_pdf(
+    supplier_id: int,
+    date_from: datetime.date | None = None,
+    date_to: datetime.date | None = None,
+    form_id: str | None = None,
+    db: Session = Depends(get_db),
+):
+    supplier = crud.get_supplier(db, supplier_id)
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    balance = crud.get_supplier_balance(db, supplier_id)
+    rows = crud.get_full_supplier_statement(
+        db, supplier_id, date_from=date_from, date_to=date_to, form_id=form_id
+    )
+    pdf_bytes = build_supplier_ledger_pdf(
+        supplier,
+        balance,
+        rows,
+        {"date_from": date_from, "date_to": date_to, "form_id": form_id},
+        datetime.datetime.now(),
+    )
+    safe_code = "".join(c if c.isalnum() else "_" for c in supplier.code).strip("_")
+    filename = f"supplier_ledger_{safe_code}_{datetime.date.today().isoformat()}.pdf"
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+
+@router.get("/supplier-transactions", response_class=HTMLResponse)
+def supplier_transactions_page(
+    request: Request,
+    search: str | None = None,
+    date_from: datetime.date | None = None,
+    date_to: datetime.date | None = None,
+    form_id: str | None = None,
+    page: int = 1,
+    db: Session = Depends(get_db),
+):
+    page_size = 30
+    rows, total = crud.list_supplier_transactions(
+        db,
+        search=search,
+        date_from=date_from,
+        date_to=date_to,
+        form_id=form_id,
+        page=page,
+        page_size=page_size,
+    )
+    form_ids = crud.list_supplier_form_ids(db)
+    ctx = {
+        "rows": rows,
+        "form_ids": form_ids,
+        "filters": {
+            "search": search or "",
+            "date_from": date_from or "",
+            "date_to": date_to or "",
+            "form_id": form_id or "",
+        },
+        "pagination": _pagination(total, page, page_size),
+        "active": "supplier_transactions",
+    }
+    if request.headers.get("HX-Request"):
+        return templates.TemplateResponse(
+            request, "partials/supplier_transactions_table.html", ctx
+        )
+    return templates.TemplateResponse(request, "supplier_transactions.html", ctx)
+
+
+@router.get("/supplier-transactions/new", response_class=HTMLResponse)
+def new_supplier_transaction_form(request: Request):
+    return templates.TemplateResponse(
+        request,
+        "partials/supplier_transaction_form.html",
+        {"today": datetime.date.today().isoformat()},
+    )
+
+
+@router.get("/supplier-transactions/supplier-lookup", response_class=HTMLResponse)
+def supplier_transaction_supplier_lookup(
+    request: Request, supplier_name: str = "", db: Session = Depends(get_db)
+):
+    query = supplier_name.strip()
+    matches = crud.find_suppliers_by_name(db, query) if query else []
+    return templates.TemplateResponse(
+        request,
+        "partials/supplier_suggestions.html",
+        {"matches": matches, "query": query},
+    )
+
+
+@router.post("/supplier-transactions/new", response_class=HTMLResponse)
+def create_supplier_transaction_from_form(
+    request: Request,
+    supplier_id: int | None = Form(None),
+    supplier_name: str = Form(...),
+    date_posted: datetime.date = Form(...),
+    details: str | None = Form(None),
+    amount_dr: float = Form(0),
+    amount_cr: float = Form(0),
+    payment_mode: str | None = Form(None),
+    account_used: str | None = Form(None),
+    item_name: str | None = Form(None),
+    measures: str | None = Form(None),
+    quantity: float | None = Form(None),
+    unit_cost: float | None = Form(None),
+    vehicle_no: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    data = schemas.SupplierTransactionCreate(
+        supplier_id=supplier_id,
+        supplier_name=supplier_name,
+        date_posted=date_posted,
+        details=details,
+        amount_dr=amount_dr,
+        amount_cr=amount_cr,
+        payment_mode=payment_mode,
+        account_used=account_used,
+        item_name=item_name,
+        measures=measures,
+        quantity=quantity,
+        unit_cost=unit_cost,
+        vehicle_no=vehicle_no,
+    )
+    crud.create_supplier_transaction(db, data)
+
+    rows, total = crud.list_supplier_transactions(db, page=1, page_size=30)
+    form_ids = crud.list_supplier_form_ids(db)
+    ctx = {
+        "rows": rows,
+        "form_ids": form_ids,
+        "filters": {"search": "", "date_from": "", "date_to": "", "form_id": ""},
+        "pagination": _pagination(total, 1, 30),
+        "active": "supplier_transactions",
+        "flash": "Supplier transaction added successfully.",
+    }
+    return templates.TemplateResponse(
+        request, "partials/supplier_transactions_table.html", ctx
+    )
+
+
+@router.delete("/supplier-transactions/{transaction_id}", response_class=HTMLResponse)
+def delete_supplier_transaction_from_ui(
+    transaction_id: int, request: Request, db: Session = Depends(get_db)
+):
+    txn = crud.get_supplier_transaction(db, transaction_id)
+    if txn:
+        crud.delete_supplier_transaction(db, txn)
     return HTMLResponse("")
