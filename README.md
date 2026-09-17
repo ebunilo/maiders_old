@@ -176,6 +176,49 @@ On a cloud VM: install Docker + the Compose plugin, copy this repo over
 a reverse proxy (nginx, Caddy, or your cloud provider's load balancer) in
 front of `APP_PORT` for TLS if the UI needs to be public.
 
+## Continuous deployment (GitHub Actions)
+
+`.github/workflows/deploy.yml` deploys to the server automatically on every
+push to `main` (or manually via the "Run workflow" button). It:
+
+1. rsyncs the repo to `DEPLOY_PATH` on the server over SSH (never touching
+   `.env`, which only ever lives on the server),
+2. writes `.env` on the server from the GitHub secrets below — the file is
+   generated in the SSH session itself, so its contents never appear on the
+   runner's disk or in the workflow log,
+3. runs `docker compose up -d --build app` and prunes old images.
+
+The target server needs Docker + the Compose plugin already installed (see
+[Run with Docker](#run-with-docker-recommended--works-on-any-cloud-server)
+above) and `DEPLOY_PATH` already existing with this repo's `docker-compose.yml`
+in it (an initial `git clone` or `rsync` to create it) — the workflow updates
+that checkout, it doesn't provision the server from scratch.
+
+Set these as **repository secrets** (Settings → Secrets and variables →
+Actions):
+
+| Secret | Used for |
+| - | - |
+| `SSH_HOST` | Server hostname/IP the workflow connects to |
+| `SSH_USER` | SSH user on that server |
+| `SSH_PRIVATE_KEY` | Private key matching a public key in that user's `~/.ssh/authorized_keys` |
+| `SSH_PORT` | SSH port, if not 22 (optional) |
+| `DEPLOY_PATH` | Absolute path on the server the app lives in, e.g. `/home/deploy/maiders` |
+| `POSTGRES_USER` | Written into `.env` — Postgres user for the `db` container |
+| `POSTGRES_PASSWORD` | Written into `.env` — Postgres password |
+| `POSTGRES_DB` | Written into `.env` — Postgres database name |
+| `APP_PORT` | Written into `.env` — host port the app is published on (optional, defaults to 8000) |
+| `WEB_CONCURRENCY` | Written into `.env` — uvicorn worker count (optional) |
+| `SECRET_KEY` | Written into `.env` — signs session cookies; generate with `python -c "import secrets; print(secrets.token_hex(32))"` and never change it across deploys, or every user gets logged out |
+| `ADMIN_USERNAME` | Written into `.env` — bootstraps the first admin account (only takes effect if no users exist yet; safe to leave set) |
+| `ADMIN_PASSWORD` | Written into `.env` — password for that bootstrap account |
+
+`SSH_PRIVATE_KEY` is the one secret worth extra care: generate a dedicated
+deploy keypair (`ssh-keygen -t ed25519 -f deploy_key -N ""`), put
+`deploy_key.pub` in the server user's `authorized_keys`, and store
+`deploy_key`'s contents (the private half) as the secret — don't reuse a
+personal SSH key.
+
 ## Run without Docker
 
 1. **Database**: point `DATABASE_URL` at any Postgres instance you have
