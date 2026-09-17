@@ -38,6 +38,59 @@ def get_or_create_customer(db: Session, code: str, name: str | None) -> models.C
     return customer
 
 
+def find_customers_by_name(db: Session, query: str, limit: int = 8) -> list[models.Customer]:
+    like = f"%{query.strip()}%"
+    stmt = (
+        select(models.Customer)
+        .where(models.Customer.name.ilike(like))
+        .order_by(models.Customer.name)
+        .limit(limit)
+    )
+    return list(db.scalars(stmt).all())
+
+
+def generate_customer_code(db: Session, name: str) -> str:
+    """Derive a short, unique customer code from a name when the caller
+    doesn't supply one (e.g. new customers added from the transaction form)."""
+    base = "".join(ch for ch in name.upper() if ch.isalnum()) or "CUST"
+    base = base[:12]
+    code = base
+    suffix = 1
+    while db.scalar(select(models.Customer.id).where(models.Customer.code == code)):
+        suffix += 1
+        code = f"{base}{suffix}"
+    return code
+
+
+def resolve_transaction_customer(db: Session, data: schemas.TransactionCreate) -> models.Customer:
+    """Find the customer a new transaction belongs to, preferring an explicit
+    id or code, and falling back to an exact (case-insensitive) name match
+    before creating a brand-new customer record with a generated code."""
+    if data.customer_id:
+        customer = get_customer(db, data.customer_id)
+        if customer:
+            return customer
+
+    if data.customer_code:
+        return get_or_create_customer(db, data.customer_code, data.customer_name)
+
+    name = (data.customer_name or "").strip()
+    if not name:
+        raise ValueError("customer_name, customer_code, or customer_id is required")
+
+    customer = db.scalar(
+        select(models.Customer).where(func.lower(models.Customer.name) == name.lower())
+    )
+    if customer:
+        return customer
+
+    customer = models.Customer(code=generate_customer_code(db, name), name=name)
+    db.add(customer)
+    db.commit()
+    db.refresh(customer)
+    return customer
+
+
 def list_customers(
     db: Session, search: str | None = None, page: int = 1, page_size: int = PAGE_SIZE_DEFAULT
 ):
@@ -189,7 +242,7 @@ def list_transactions(
 
 
 def create_transaction(db: Session, data: schemas.TransactionCreate) -> models.Transaction:
-    customer = get_or_create_customer(db, data.customer_code, data.customer_name)
+    customer = resolve_transaction_customer(db, data)
     txn = models.Transaction(
         customer_id=customer.id,
         ref_no=data.ref_no,
@@ -204,6 +257,9 @@ def create_transaction(db: Session, data: schemas.TransactionCreate) -> models.T
         form_id=data.form_id,
     )
     db.add(txn)
+    db.flush()
+    if not txn.trans_no:
+        txn.trans_no = f"TXN{txn.id:06d}"
     db.commit()
     db.refresh(txn)
     return txn

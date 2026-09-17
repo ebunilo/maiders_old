@@ -206,47 +206,52 @@ def transactions_page(
 
 
 @router.get("/transactions/new", response_class=HTMLResponse)
-def new_transaction_form(request: Request, db: Session = Depends(get_db)):
-    form_ids = crud.list_form_ids(db)
+def new_transaction_form(request: Request):
     return templates.TemplateResponse(
         request,
         "partials/transaction_form.html",
         {
-            "form_ids": form_ids,
             "txn": None,
             "today": datetime.date.today().isoformat(),
         },
     )
 
 
+@router.get("/transactions/customer-lookup", response_class=HTMLResponse)
+def transaction_customer_lookup(
+    request: Request, customer_name: str = "", db: Session = Depends(get_db)
+):
+    query = customer_name.strip()
+    matches = crud.find_customers_by_name(db, query) if query else []
+    return templates.TemplateResponse(
+        request,
+        "partials/customer_suggestions.html",
+        {"matches": matches, "query": query},
+    )
+
+
 @router.post("/transactions/new", response_class=HTMLResponse)
 def create_transaction_from_form(
     request: Request,
-    customer_code: str = Form(...),
-    customer_name: str | None = Form(None),
+    customer_id: int | None = Form(None),
+    customer_name: str = Form(...),
     date_posted: datetime.date = Form(...),
     details: str | None = Form(None),
     amount_dr: float = Form(0),
     amount_cr: float = Form(0),
-    invoice_no: str | None = Form(None),
     payment_mode: str | None = Form(None),
     bank_name: str | None = Form(None),
-    trans_no: str | None = Form(None),
-    form_id: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
     data = schemas.TransactionCreate(
-        customer_code=customer_code,
+        customer_id=customer_id,
         customer_name=customer_name,
         date_posted=date_posted,
         details=details,
         amount_dr=amount_dr,
         amount_cr=amount_cr,
-        invoice_no=invoice_no,
         payment_mode=payment_mode,
         bank_name=bank_name,
-        trans_no=trans_no,
-        form_id=form_id,
     )
     crud.create_transaction(db, data)
 

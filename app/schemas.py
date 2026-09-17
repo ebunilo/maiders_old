@@ -40,7 +40,8 @@ class TransactionBase(BaseModel):
 
 
 class TransactionCreate(TransactionBase):
-    customer_code: str
+    customer_id: int | None = None
+    customer_code: str | None = None
     customer_name: str | None = None
 
 

@@ -5,24 +5,27 @@
 <form hx-post="/transactions/new" hx-target="#results" hx-swap="innerHTML">
   <div class="modal-body">
     <div class="row g-2">
-      <div class="col-6">
-        <label class="form-label small">Customer Code</label>
-        <input class="form-control form-control-sm" name="customer_code" required>
-      </div>
-      <div class="col-6">
+      <div class="col-12 position-relative">
         <label class="form-label small">Customer Name</label>
-        <input class="form-control form-control-sm" name="customer_name" placeholder="Defaults to code">
+        <input
+          class="form-control form-control-sm"
+          id="txn-customer-name"
+          name="customer_name"
+          autocomplete="off"
+          required
+          hx-get="/transactions/customer-lookup"
+          hx-trigger="input changed delay:250ms"
+          hx-target="#txn-customer-suggestions"
+          hx-swap="innerHTML"
+          oninput="document.getElementById('txn-customer-id').value=''"
+          onblur="setTimeout(() => document.getElementById('txn-customer-suggestions').innerHTML='', 200)"
+        >
+        <input type="hidden" id="txn-customer-id" name="customer_id">
+        <div id="txn-customer-suggestions" class="position-absolute w-100" style="z-index: 1056;"></div>
       </div>
       <div class="col-6">
         <label class="form-label small">Date</label>
         <input type="date" class="form-control form-control-sm" name="date_posted" required value="{{ today }}">
-      </div>
-      <div class="col-6">
-        <label class="form-label small">Form Type</label>
-        <select class="form-select form-select-sm" name="form_id">
-          <option value="">-</option>
-          {% for f in form_ids %}<option value="{{ f }}">{{ f }}</option>{% endfor %}
-        </select>
       </div>
       <div class="col-12">
         <label class="form-label small">Details</label>
@@ -44,14 +47,6 @@
         <label class="form-label small">Bank Name</label>
         <input class="form-control form-control-sm" name="bank_name">
       </div>
-      <div class="col-6">
-        <label class="form-label small">Invoice No</label>
-        <input class="form-control form-control-sm" name="invoice_no">
-      </div>
-      <div class="col-6">
-        <label class="form-label small">Trans No</label>
-        <input class="form-control form-control-sm" name="trans_no">
-      </div>
     </div>
   </div>
   <div class="modal-footer">
@@ -59,3 +54,10 @@
     <button type="submit" class="btn btn-primary btn-sm" data-bs-dismiss="modal">Save Transaction</button>
   </div>
 </form>
+<script>
+  function selectTxnCustomer(id, name) {
+    document.getElementById('txn-customer-name').value = name;
+    document.getElementById('txn-customer-id').value = id;
+    document.getElementById('txn-customer-suggestions').innerHTML = '';
+  }
+</script>
