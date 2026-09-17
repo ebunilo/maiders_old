@@ -2,7 +2,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 
-from app.authz import ADMIN, home_for, path_allowed
+from app.authz import ADMIN, home_for, login_restricted, path_allowed
 
 PUBLIC_PATHS = {"/login", "/logout", "/healthz", "/favicon.ico"}
 PUBLIC_PREFIXES = ("/static/",)
@@ -26,6 +26,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return RedirectResponse(url=f"/login?next={path}{query}", status_code=303)
 
         role = request.session.get("role", ADMIN)
+
+        if login_restricted(role):
+            request.session.clear()
+            if request.headers.get("hx-request") == "true":
+                return Response(status_code=401, headers={"HX-Redirect": "/login?blocked=hours"})
+            if path.startswith("/api/"):
+                return JSONResponse({"detail": "Outside permitted login hours"}, status_code=401)
+            return RedirectResponse(url="/login?blocked=hours", status_code=303)
+
         if path_allowed(role, path, request.method):
             return await call_next(request)
 

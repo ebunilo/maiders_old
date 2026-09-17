@@ -90,7 +90,16 @@ A request outside a role's allowed paths is redirected to that role's home
 page (a 403 for API/HTMX calls) instead of erroring, and the nav bar only
 shows links a role can actually open. `admin` is the default for new
 accounts, so it's the one to use for anyone who should see the whole
-business.
+business. Only `admin` can delete a transaction — `customer-user` and
+`supplier-user` don't get the delete button, and the endpoint rejects them
+even if called directly.
+
+`customer-user` and `supplier-user` are also restricted to signing in
+between **8:00 AM and 6:30 PM WAT** (`app/authz.py`, checked against a fixed
+UTC+1 offset — not the host's local clock, so it's correct regardless of the
+server's own timezone setting). A login attempt outside that window is
+rejected with a message; a session already open when the window closes is
+logged out on its next request. `admin` is never time-restricted.
 
 - **First account**: set `ADMIN_USERNAME` and `ADMIN_PASSWORD` in `.env`
   before the first `docker compose up`. The app creates that user (as

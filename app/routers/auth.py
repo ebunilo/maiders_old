@@ -6,7 +6,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app import models
-from app.authz import ADMIN, home_for, path_allowed
+from app.authz import ADMIN, LOGIN_WINDOW_MESSAGE, home_for, login_restricted, path_allowed
 from app.database import get_db
 from app.security import verify_password
 
@@ -24,12 +24,13 @@ def _landing_url(role: str, next_url: str | None) -> str:
 
 
 @router.get("/login", response_class=HTMLResponse)
-def login_form(request: Request, next: str = "/"):
+def login_form(request: Request, next: str = "/", blocked: str | None = None):
     if request.session.get("user_id"):
         role = request.session.get("role", ADMIN)
         return RedirectResponse(url=_landing_url(role, next), status_code=303)
+    error = LOGIN_WINDOW_MESSAGE if blocked == "hours" else None
     return templates.TemplateResponse(
-        request, "login.html", {"error": None, "next": next}
+        request, "login.html", {"error": error, "next": next}
     )
 
 
@@ -48,6 +49,13 @@ def login_submit(
             "login.html",
             {"error": "Invalid username or password.", "next": next},
             status_code=401,
+        )
+    if login_restricted(user.role):
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {"error": LOGIN_WINDOW_MESSAGE, "next": next},
+            status_code=403,
         )
     request.session.clear()
     request.session["user_id"] = user.id
