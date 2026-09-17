@@ -1,0 +1,73 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Ships the working tree to the server with rsync over SSH. The
+      # server never needs its own git credentials/deploy key this way --
+      # it only needs the SSH key below to accept the connection.
+      - name: Sync code to server
+        uses: easingthemes/ssh-deploy@v4
+        with:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          REMOTE_HOST: ${{ secrets.SSH_HOST }}
+          REMOTE_USER: ${{ secrets.SSH_USER }}
+          REMOTE_PORT: ${{ secrets.SSH_PORT || 22 }}
+          TARGET: ${{ secrets.DEPLOY_PATH }}
+          SOURCE: "./"
+          # .env is server-side state (written by the next step) -- never
+          # let a sync overwrite or delete it.
+          EXCLUDE: ".git/, .github/, .venv/, __pycache__/, .env"
+          ARGS: "-avz --delete"
+
+      # Writes .env from secrets straight on the server (never touches the
+      # runner's disk or the workflow log) and brings the stack up.
+      - name: Write .env and deploy
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          APP_PORT: ${{ secrets.APP_PORT }}
+          WEB_CONCURRENCY: ${{ secrets.WEB_CONCURRENCY }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          envs: DEPLOY_PATH,POSTGRES_USER,POSTGRES_PASSWORD,POSTGRES_DB,APP_PORT,WEB_CONCURRENCY,SECRET_KEY,ADMIN_USERNAME,ADMIN_PASSWORD
+          script: |
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+
+            umask 077
+            cat > .env <<ENVEOF
+            POSTGRES_USER=$POSTGRES_USER
+            POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+            POSTGRES_DB=$POSTGRES_DB
+            APP_PORT=$APP_PORT
+            WEB_CONCURRENCY=$WEB_CONCURRENCY
+            SECRET_KEY=$SECRET_KEY
+            ADMIN_USERNAME=$ADMIN_USERNAME
+            ADMIN_PASSWORD=$ADMIN_PASSWORD
+            ENVEOF
+
+            docker compose up -d --build app
+            docker image prune -f
