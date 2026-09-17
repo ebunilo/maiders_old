@@ -12,10 +12,13 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 from app.models import Customer, Transaction
 
-COMPANY_NAME = "Maiders Steel Company"
+COMPANY_NAME = "Maiders Touch Steel Company Ltd"
+COMPANY_WEBSITE = "maiders.com.ng"
+COMPANY_EMAIL = "info@maiders.com.ng"
+COMPANY_PHONES = ["08033850151", "08108125328", "08063224169"]
 PAGE_SIZE = landscape(A4)
 MARGIN = 15 * mm
-HEADER_HEIGHT = 24 * mm
+HEADER_HEIGHT = 28 * mm
 FOOTER_HEIGHT = 12 * mm
 
 
@@ -69,6 +72,14 @@ def _make_header_drawer(customer: Customer, generated_at: datetime.datetime, fil
         canvas_obj.setFont("Helvetica", 11)
         canvas_obj.drawString(MARGIN, height - MARGIN - 15, "Customer Ledger")
 
+        contact_line = (
+            f"Website: {COMPANY_WEBSITE}  |  Email: {COMPANY_EMAIL}  |  "
+            f"Tel: {', '.join(COMPANY_PHONES)}"
+        )
+        canvas_obj.setFont("Helvetica", 8)
+        canvas_obj.setFillColor(colors.grey)
+        canvas_obj.drawString(MARGIN, height - MARGIN - 27, contact_line)
+
         canvas_obj.setFont("Helvetica", 9)
         canvas_obj.setFillColor(colors.grey)
         canvas_obj.drawRightString(
@@ -97,7 +108,7 @@ def _make_header_drawer(customer: Customer, generated_at: datetime.datetime, fil
         canvas_obj.setStrokeColor(colors.grey)
         canvas_obj.setLineWidth(0.75)
         canvas_obj.line(
-            MARGIN, height - MARGIN - 32, width - MARGIN, height - MARGIN - 32
+            MARGIN, height - MARGIN - 36, width - MARGIN, height - MARGIN - 36
         )
         canvas_obj.restoreState()
 
@@ -211,6 +222,17 @@ def build_customer_ledger_pdf(
         )
     )
     story.append(table)
+
+    net_balance = Decimal(balance["balance"])
+    if net_balance > 0:
+        owing_text = f"The customer {customer.name} is owing us: NGN {_money(net_balance)}."
+    else:
+        owing_text = f"{COMPANY_NAME} is owing {customer.name}: NGN {_money(abs(net_balance))}."
+    owing_style = ParagraphStyle(
+        "owing", parent=styles["Normal"], fontSize=10, leading=13, fontName="Helvetica-Bold"
+    )
+    story.append(Spacer(1, 6 * mm))
+    story.append(Paragraph(escape(owing_text), owing_style))
 
     header_drawer = _make_header_drawer(customer, generated_at, filters)
     doc.build(

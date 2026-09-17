@@ -1,0 +1,15 @@
+{% if query %}
+<div class="list-group shadow-sm">
+  {% for c in matches %}
+  <button
+    type="button"
+    class="list-group-item list-group-item-action py-1 px-2 small"
+    data-customer-id="{{ c.id }}"
+    data-customer-name="{{ c.name }}"
+    onclick="selectTxnCustomer(this.dataset.customerId, this.dataset.customerName)"
+  >{{ c.name }} <span class="text-muted">({{ c.code }})</span></button>
+  {% else %}
+  <div class="list-group-item py-1 px-2 small text-muted">No match — a new customer will be created.</div>
+  {% endfor %}
+</div>
+{% endif %}
