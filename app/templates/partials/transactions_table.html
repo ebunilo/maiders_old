@@ -1,0 +1,46 @@
+{% if flash %}
+<div class="alert alert-success alert-dismissible fade show" role="alert">
+  {{ flash }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+<table class="table table-sm table-hover bg-white">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Customer</th>
+      <th>Details</th>
+      <th>Form</th>
+      <th>Payment</th>
+      <th class="text-end">Debit</th>
+      <th class="text-end">Credit</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for t, c in rows %}
+    <tr id="row-{{ t.id }}">
+      <td>{{ t.date_posted }}</td>
+      <td><a href="/customers/{{ c.id }}">{{ c.name }}</a></td>
+      <td>{{ t.details }}</td>
+      <td><span class="badge text-bg-secondary">{{ t.form_id or '-' }}</span></td>
+      <td class="small">{{ t.payment_mode or '-' }}</td>
+      <td class="text-end amount-dr">{% if t.amount_dr %}₦{{ t.amount_dr | money }}{% endif %}</td>
+      <td class="text-end amount-cr">{% if t.amount_cr %}₦{{ t.amount_cr | money }}{% endif %}</td>
+      <td class="text-end">
+        <button
+          class="btn btn-sm btn-outline-danger"
+          hx-delete="/transactions/{{ t.id }}"
+          hx-target="#row-{{ t.id }}"
+          hx-swap="outerHTML"
+          hx-confirm="Delete this transaction?"
+        >Delete</button>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="8" class="text-center text-muted py-4">No transactions found.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% include "partials/pagination.html" with context %}

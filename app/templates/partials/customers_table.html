@@ -1,0 +1,30 @@
+<table class="table table-sm table-hover bg-white">
+  <thead>
+    <tr>
+      <th>Code</th>
+      <th>Name</th>
+      <th class="text-end">Total Dr</th>
+      <th class="text-end">Total Cr</th>
+      <th class="text-end">Balance</th>
+      <th class="text-end"># Txns</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for c in customers %}
+    <tr class="cursor-pointer" onclick="window.location='/customers/{{ c.id }}'" style="cursor:pointer">
+      <td>{{ c.code }}</td>
+      <td>{{ c.name }}</td>
+      <td class="text-end amount-dr">₦{{ c.total_dr | money }}</td>
+      <td class="text-end amount-cr">₦{{ c.total_cr | money }}</td>
+      <td class="text-end {% if c.balance >= 0 %}balance-positive{% else %}balance-negative{% endif %}">
+        ₦{{ c.balance | money }}
+      </td>
+      <td class="text-end">{{ c.transaction_count }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="text-center text-muted py-4">No customers found.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% include "partials/pagination.html" with context %}

@@ -1,0 +1,46 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-maiders}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-maiders}
+      POSTGRES_DB: ${POSTGRES_DB:-maiders}
+    # Not published to the host: only the app/import services need to reach
+    # it, over the internal compose network. Use `docker compose exec db
+    # psql -U $POSTGRES_USER` for ad-hoc access instead.
+    volumes:
+      - maiders_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-maiders}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-maiders}:${POSTGRES_PASSWORD:-maiders}@db:5432/${POSTGRES_DB:-maiders}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # One-off data loader. Not started by `docker compose up`; run explicitly:
+  #   docker compose run --rm import
+  #   docker compose run --rm import python -m scripts.import_csv "Customer Transactions_114458.csv" --reset
+  import:
+    build: .
+    profiles: ["tools"]
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-maiders}:${POSTGRES_PASSWORD:-maiders}@db:5432/${POSTGRES_DB:-maiders}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["python", "-m", "scripts.import_csv", "Customer Transactions_114458.csv"]
+
+volumes:
+  maiders_pgdata:

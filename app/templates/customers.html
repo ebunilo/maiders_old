@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Customers - Ledger{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Customers</h3>
+  <input
+    type="search"
+    class="form-control"
+    style="max-width: 320px"
+    name="search"
+    placeholder="Search by name or code..."
+    value="{{ search }}"
+    hx-get="/customers"
+    hx-trigger="input changed delay:300ms, search"
+    hx-target="#results"
+    hx-push-url="true"
+  />
+</div>
+<div id="results">
+  {% include "partials/customers_table.html" %}
+</div>
+{% endblock %}
