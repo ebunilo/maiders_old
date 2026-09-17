@@ -51,16 +51,20 @@ WAT = datetime.timezone(datetime.timedelta(hours=1), name="WAT")
 
 LOGIN_WINDOW_START = datetime.time(8, 0)
 LOGIN_WINDOW_END = datetime.time(18, 30)
+LOGIN_CLOSED_WEEKDAY = 6  # datetime.weekday(): Monday=0 ... Sunday=6
 LOGIN_WINDOW_MESSAGE = (
-    "Your account may only be used between 8:00 AM and 6:30 PM (WAT). "
-    "Please sign in again during that window."
+    "Your account may only be used Monday-Saturday, between 8:00 AM and "
+    "6:30 PM (WAT). Please sign in again during that window."
 )
 
 
 def login_restricted(role: str, now: datetime.datetime | None = None) -> bool:
-    """Non-admin roles are time-boxed to the official login window; admins
-    are never restricted."""
+    """Non-admin roles are time-boxed to the official login window
+    (Mon-Sat, 8:00 AM-6:30 PM WAT) and shut out entirely on Sundays;
+    admins are never restricted."""
     if role == ADMIN:
         return False
-    current = (now or datetime.datetime.now(WAT)).astimezone(WAT).time()
-    return not (LOGIN_WINDOW_START <= current <= LOGIN_WINDOW_END)
+    current = (now or datetime.datetime.now(WAT)).astimezone(WAT)
+    if current.weekday() == LOGIN_CLOSED_WEEKDAY:
+        return True
+    return not (LOGIN_WINDOW_START <= current.time() <= LOGIN_WINDOW_END)
