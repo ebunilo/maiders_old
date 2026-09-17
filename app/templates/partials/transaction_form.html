@@ -38,7 +38,6 @@
           inputmode="decimal"
           class="form-control form-control-sm"
           data-target="txn-amount-dr"
-          value="0.00"
           oninput="formatTxnAmountInput(this)"
         >
         <input type="hidden" id="txn-amount-dr" name="amount_dr" value="0">
@@ -50,7 +49,6 @@
           inputmode="decimal"
           class="form-control form-control-sm"
           data-target="txn-amount-cr"
-          value="0.00"
           oninput="formatTxnAmountInput(this)"
         >
         <input type="hidden" id="txn-amount-cr" name="amount_cr" value="0">
@@ -80,6 +78,12 @@
   function formatTxnAmountInput(input) {
     const hidden = document.getElementById(input.dataset.target);
 
+    // Remember how many digit/decimal-point characters sit before the
+    // cursor so it can be restored at the same spot after re-inserting
+    // thousands separators (which shift everything after them).
+    const prevCursor = input.selectionStart;
+    const digitsBeforeCursor = input.value.slice(0, prevCursor).replace(/[^\d.]/g, '').length;
+
     let digits = input.value.replace(/[^\d.]/g, '');
     const firstDot = digits.indexOf('.');
     if (firstDot !== -1) {
@@ -92,17 +96,28 @@
       return;
     }
 
-    const [rawInt, rawDec] = digits.split('.');
-    const intPart = (rawInt || '').replace(/^0+(?=\d)/, '');
-    const intFormatted = intPart ? Number(intPart).toLocaleString('en-US') : '0';
+    let [intPart, decPart] = digits.split('.');
+    intPart = intPart.replace(/^0+(?=\d)/, '') || '0';
+    const intFormatted = Number(intPart).toLocaleString('en-US');
 
-    if (rawDec !== undefined) {
-      const decPart = rawDec.slice(0, 2);
+    if (decPart !== undefined) {
+      decPart = decPart.slice(0, 2);
       input.value = intFormatted + '.' + decPart;
-      hidden.value = (intPart || '0') + '.' + decPart.padEnd(2, '0');
+      hidden.value = intPart + '.' + decPart.padEnd(2, '0');
     } else {
-      input.value = intFormatted + '.00';
-      hidden.value = (intPart || '0') + '.00';
+      input.value = intFormatted;
+      hidden.value = intPart;
     }
+
+    let seen = 0;
+    let cursor = input.value.length;
+    for (let i = 0; i < input.value.length; i++) {
+      if (/[\d.]/.test(input.value[i])) seen++;
+      if (seen >= digitsBeforeCursor) {
+        cursor = i + 1;
+        break;
+      }
+    }
+    input.setSelectionRange(cursor, cursor);
   }
 </script>
