@@ -3,7 +3,8 @@
 {% block content %}
 <h3 class="mb-4">Dashboard</h3>
 
-<div class="row g-3 mb-4">
+<h5 class="text-uppercase text-muted small fw-bold mb-2">Customers</h5>
+<div class="row g-3 mb-3">
   <div class="col-6 col-md-3">
     <div class="card kpi-card p-3">
       <div class="text-muted small">Customers</div>
@@ -30,14 +31,14 @@
   </div>
 </div>
 
-<div class="row g-3">
+<div class="row g-3 mb-4">
   <div class="col-lg-4">
     <div class="card p-3">
       <h6>Net Outstanding</h6>
       <div class="fs-2 fw-bold {% if summary.net_outstanding >= 0 %}balance-positive{% else %}balance-negative{% endif %}">
         ₦{{ summary.net_outstanding | money }}
       </div>
-      <p class="text-muted small mb-0">Sum of debits minus credits across all customers.</p>
+      <p class="text-muted small mb-0">Sum of debits minus credits across all customers &mdash; what customers owe us.</p>
     </div>
     <div class="card p-3 mt-3">
       <h6>Top 10 Debtors</h6>
@@ -49,6 +50,8 @@
             <td>{{ c.name }}</td>
             <td class="text-end">₦{{ c.balance | money }}</td>
           </tr>
+        {% else %}
+          <tr><td colspan="2" class="text-center text-muted py-3">No customer data yet.</td></tr>
         {% endfor %}
         </tbody>
       </table>
@@ -56,22 +59,98 @@
   </div>
   <div class="col-lg-8">
     <div class="card p-3">
-      <h6>Monthly Debit vs Credit</h6>
+      <h6>Monthly Debit vs Credit (Customers)</h6>
       <canvas id="monthlyChart" height="120"></canvas>
+    </div>
+  </div>
+</div>
+
+<hr class="my-4">
+
+<h5 class="text-uppercase text-muted small fw-bold mb-2">Suppliers</h5>
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="card kpi-card p-3">
+      <div class="text-muted small">Suppliers</div>
+      <div class="fs-3 fw-bold">{{ supplier_summary.total_suppliers }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card kpi-card p-3">
+      <div class="text-muted small">Transactions</div>
+      <div class="fs-3 fw-bold">{{ supplier_summary.total_transactions }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card kpi-card p-3">
+      <div class="text-muted small">Total Debit</div>
+      <div class="fs-4 fw-bold amount-dr">₦{{ supplier_summary.total_dr | money }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card kpi-card p-3">
+      <div class="text-muted small">Total Credit</div>
+      <div class="fs-4 fw-bold amount-cr">₦{{ supplier_summary.total_cr | money }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-4">
+    <div class="card p-3">
+      <h6>Net Payable</h6>
+      <div class="fs-2 fw-bold {% if supplier_summary.net_payable >= 0 %}balance-positive{% else %}balance-negative{% endif %}">
+        ₦{{ supplier_summary.net_payable | money }}
+      </div>
+      <p class="text-muted small mb-0">Sum of debits minus credits across all suppliers &mdash; what we owe suppliers.</p>
+    </div>
+    <div class="card p-3 mt-3">
+      <h6>Top 10 Creditors</h6>
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Supplier</th><th class="text-end">Balance</th></tr></thead>
+        <tbody>
+        {% for s in top_creditors %}
+          <tr>
+            <td>{{ s.name }}</td>
+            <td class="text-end">₦{{ s.balance | money }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="2" class="text-center text-muted py-3">No supplier data yet.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="col-lg-8">
+    <div class="card p-3">
+      <h6>Monthly Debit vs Credit (Suppliers)</h6>
+      <canvas id="supplierMonthlyChart" height="120"></canvas>
     </div>
   </div>
 </div>
 
 <script>
   const monthlyData = {{ monthly_data | tojson }};
-  const ctx = document.getElementById('monthlyChart');
-  new Chart(ctx, {
+  new Chart(document.getElementById('monthlyChart'), {
     type: 'bar',
     data: {
       labels: monthlyData.map(d => d.month),
       datasets: [
         { label: 'Debit', data: monthlyData.map(d => d.total_dr), backgroundColor: '#b02a37' },
         { label: 'Credit', data: monthlyData.map(d => d.total_cr), backgroundColor: '#146c43' },
+      ],
+    },
+    options: { responsive: true, scales: { y: { beginAtZero: true } } },
+  });
+
+  const supplierMonthlyData = {{ supplier_monthly_data | tojson }};
+  new Chart(document.getElementById('supplierMonthlyChart'), {
+    type: 'bar',
+    data: {
+      labels: supplierMonthlyData.map(d => d.month),
+      datasets: [
+        { label: 'Debit', data: supplierMonthlyData.map(d => d.total_dr), backgroundColor: '#b02a37' },
+        { label: 'Credit', data: supplierMonthlyData.map(d => d.total_cr), backgroundColor: '#146c43' },
       ],
     },
     options: { responsive: true, scales: { y: { beginAtZero: true } } },
