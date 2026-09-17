@@ -1,0 +1,25 @@
+body {
+  background-color: #f4f6f9;
+}
+.kpi-card {
+  border: none;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.table-sm td, .table-sm th {
+  vertical-align: middle;
+}
+.amount-dr {
+  color: #b02a37;
+}
+.amount-cr {
+  color: #146c43;
+}
+.balance-positive {
+  color: #b02a37;
+  font-weight: 600;
+}
+.balance-negative {
+  color: #146c43;
+  font-weight: 600;
+}
