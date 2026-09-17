@@ -27,6 +27,16 @@ def format_money(value) -> str:
 templates.env.filters["money"] = format_money
 
 
+def relative_url(url) -> str:
+    """Path + query only, so pagination/search links stay same-origin behind
+    a reverse proxy or TLS terminator (request.url's scheme/host reflect
+    what the app process saw, not what the browser is using)."""
+    return url.path + (f"?{url.query}" if url.query else "")
+
+
+templates.env.filters["relurl"] = relative_url
+
+
 def _pagination(total: int, page: int, page_size: int) -> dict:
     pages = max(1, math.ceil(total / page_size)) if page_size else 1
     window_start = max(1, page - 2)

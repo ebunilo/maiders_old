@@ -7,16 +7,16 @@
     <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
       <a
         class="page-link"
-        href="{{ request.url.include_query_params(page=pagination.page - 1) }}"
-        hx-get="{{ request.url.include_query_params(page=pagination.page - 1) }}"
+        href="{{ request.url.include_query_params(page=pagination.page - 1) | relurl }}"
+        hx-get="{{ request.url.include_query_params(page=pagination.page - 1) | relurl }}"
         hx-target="#results"
         hx-push-url="true"
       >&laquo;</a>
     </li>
     {% if pagination.window[0] > 1 %}
       <li class="page-item">
-        <a class="page-link" href="{{ request.url.include_query_params(page=1) }}"
-           hx-get="{{ request.url.include_query_params(page=1) }}" hx-target="#results" hx-push-url="true">1</a>
+        <a class="page-link" href="{{ request.url.include_query_params(page=1) | relurl }}"
+           hx-get="{{ request.url.include_query_params(page=1) | relurl }}" hx-target="#results" hx-push-url="true">1</a>
       </li>
       {% if pagination.window[0] > 2 %}<li class="page-item disabled"><span class="page-link">&hellip;</span></li>{% endif %}
     {% endif %}
@@ -24,8 +24,8 @@
       <li class="page-item {% if p == pagination.page %}active{% endif %}">
         <a
           class="page-link"
-          href="{{ request.url.include_query_params(page=p) }}"
-          hx-get="{{ request.url.include_query_params(page=p) }}"
+          href="{{ request.url.include_query_params(page=p) | relurl }}"
+          hx-get="{{ request.url.include_query_params(page=p) | relurl }}"
           hx-target="#results"
           hx-push-url="true"
         >{{ p }}</a>
@@ -34,15 +34,15 @@
     {% if pagination.window[-1] < pagination.pages %}
       {% if pagination.window[-1] < pagination.pages - 1 %}<li class="page-item disabled"><span class="page-link">&hellip;</span></li>{% endif %}
       <li class="page-item">
-        <a class="page-link" href="{{ request.url.include_query_params(page=pagination.pages) }}"
-           hx-get="{{ request.url.include_query_params(page=pagination.pages) }}" hx-target="#results" hx-push-url="true">{{ pagination.pages }}</a>
+        <a class="page-link" href="{{ request.url.include_query_params(page=pagination.pages) | relurl }}"
+           hx-get="{{ request.url.include_query_params(page=pagination.pages) | relurl }}" hx-target="#results" hx-push-url="true">{{ pagination.pages }}</a>
       </li>
     {% endif %}
     <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
       <a
         class="page-link"
-        href="{{ request.url.include_query_params(page=pagination.page + 1) }}"
-        hx-get="{{ request.url.include_query_params(page=pagination.page + 1) }}"
+        href="{{ request.url.include_query_params(page=pagination.page + 1) | relurl }}"
+        hx-get="{{ request.url.include_query_params(page=pagination.page + 1) | relurl }}"
         hx-target="#results"
         hx-push-url="true"
       >&raquo;</a>
