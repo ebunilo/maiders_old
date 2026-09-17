@@ -16,22 +16,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Loads the deploy key into an SSH agent for the next step. A
+      # Docker-based action (not Node), so it's unaffected by the
+      # Node 20 runner deprecation.
+      - name: Set up SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
       # Ships the working tree to the server with rsync over SSH. The
       # server never needs its own git credentials/deploy key this way --
-      # it only needs the SSH key below to accept the connection.
+      # it only needs the SSH key above to accept the connection.
       - name: Sync code to server
-        uses: easingthemes/ssh-deploy@v4
-        with:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          REMOTE_HOST: ${{ secrets.SSH_HOST }}
-          REMOTE_USER: ${{ secrets.SSH_USER }}
-          REMOTE_PORT: ${{ secrets.SSH_PORT || 22 }}
-          TARGET: ${{ secrets.DEPLOY_PATH }}
-          SOURCE: "./"
-          # .env is server-side state (written by the next step) -- never
-          # let a sync overwrite or delete it.
-          EXCLUDE: ".git/, .github/, .venv/, __pycache__/, .env"
-          ARGS: "-avz --delete"
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT || 22 }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          rsync -avz --delete \
+            --exclude=.git/ --exclude=.github/ --exclude=.venv/ --exclude=__pycache__/ --exclude=.env \
+            -e "ssh -p $SSH_PORT" \
+            ./ "$SSH_USER@$SSH_HOST:$DEPLOY_PATH"
 
       # Writes .env from secrets straight on the server (never touches the
       # runner's disk or the workflow log) and brings the stack up.
