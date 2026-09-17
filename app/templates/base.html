@@ -19,23 +19,30 @@
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav">
         <span class="navbar-toggler-icon"></span>
       </button>
+      {% set role = request.session.get('role', 'admin') %}
       <div class="collapse navbar-collapse" id="nav">
         <ul class="navbar-nav me-auto">
+          {% if role == 'admin' %}
           <li class="nav-item">
             <a class="nav-link {% if active == 'dashboard' %}active fw-bold{% endif %}" href="/">Dashboard</a>
           </li>
+          {% endif %}
+          {% if role in ('admin', 'customer-user') %}
           <li class="nav-item">
             <a class="nav-link {% if active == 'customers' %}active fw-bold{% endif %}" href="/customers">Customers</a>
           </li>
           <li class="nav-item">
             <a class="nav-link {% if active == 'transactions' %}active fw-bold{% endif %}" href="/transactions">Transactions</a>
           </li>
+          {% endif %}
+          {% if role in ('admin', 'supplier-user') %}
           <li class="nav-item">
             <a class="nav-link {% if active == 'suppliers' %}active fw-bold{% endif %}" href="/suppliers">Suppliers</a>
           </li>
           <li class="nav-item">
             <a class="nav-link {% if active == 'supplier_transactions' %}active fw-bold{% endif %}" href="/supplier-transactions">Supplier Transactions</a>
           </li>
+          {% endif %}
         </ul>
         <span class="navbar-text text-light me-3 small">{{ request.session.get('username', '') }}</span>
         <a class="btn btn-outline-light btn-sm" href="/logout">Logout</a>

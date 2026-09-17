@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import inspect, text
 from starlette.middleware.sessions import SessionMiddleware
 
 from app import models
@@ -12,6 +13,14 @@ from app.security import hash_password
 app = FastAPI(title="Customer Transactions Ledger")
 
 Base.metadata.create_all(bind=engine)
+
+# create_all only fills in missing tables, not columns added to a table that
+# already exists in production (the `users` table predates the `role`
+# column) -- so backfill it by hand, once, if it's not there yet.
+with engine.begin() as conn:
+    columns = {c["name"] for c in inspect(conn).get_columns("users")}
+    if "role" not in columns:
+        conn.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'admin'"))
 
 if settings.admin_username and settings.admin_password:
     db = SessionLocal()
