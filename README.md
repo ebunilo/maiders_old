@@ -22,12 +22,19 @@ behind a login.
 - **Import**: `scripts/import_csv.py` is a one-off/idempotent loader that
   cleans the raw export (trims whitespace, turns the `==========`
   placeholder cells into NULL, parses dates/decimals) and bulk-inserts it.
+- **PDF export**: `app/pdf.py` renders a customer's full ledger (respecting
+  any date/type filter applied on screen) to a paginated PDF with ReportLab
+  — a repeating header (company name, "Customer Ledger", customer, generated
+  timestamp) and a "Page X/Y" footer on every page. "Download / Print PDF"
+  on a customer's page opens it in a new tab, from which the browser's PDF
+  viewer can print or save it.
 
 ```text
 app/
   main.py            FastAPI app wiring, session/auth middleware, admin bootstrap
   auth.py            AuthMiddleware — gates every route behind login
   security.py        Password hashing (PBKDF2-HMAC-SHA256)
+  pdf.py             Renders a customer's ledger to a paginated PDF (ReportLab)
   database.py        SQLAlchemy engine/session
   models.py          User, Customer, Transaction ORM models
   schemas.py         Pydantic request/response models
