@@ -4,7 +4,8 @@ A small FastAPI + PostgreSQL app that turns the legacy `Customer Transactions_11
 and `Supplier Ledger_114158.csv` exports into a queryable ledger with a web
 UI: customer statements and supplier statements (each with running
 balances), searchable/filterable transaction logs for both, and a dashboard
-with clearly separated customer/supplier sections — all behind a login.
+with clearly separated customer/supplier sections — all behind a login with
+role-based access (admin / customer-user / supplier-user).
 
 ## Architecture
 
@@ -26,7 +27,9 @@ with clearly separated customer/supplier sections — all behind a login.
 - **Auth**: signed-cookie sessions (`starlette.SessionMiddleware`). A
   middleware (`app/auth.py`) blocks every route except `/login`, `/static/*`
   and `/healthz` unless the session has a logged-in user — this covers the
-  JSON API too, not just the HTML pages.
+  JSON API too, not just the HTML pages. Each user also has a `role`
+  (`app/authz.py`) that the same middleware uses to further restrict which
+  paths they can reach — see [Authentication & roles](#authentication--roles).
 - **Import**: `scripts/import_csv.py` (customers) and
   `scripts/import_supplier_csv.py` (suppliers) are one-off/idempotent
   loaders that clean their respective raw export (trim whitespace, turn
@@ -46,11 +49,12 @@ with clearly separated customer/supplier sections — all behind a login.
 ```text
 app/
   main.py            FastAPI app wiring, session/auth middleware, admin bootstrap
-  auth.py            AuthMiddleware — gates every route behind login
+  auth.py            AuthMiddleware — gates every route behind login and role
+  authz.py           Role definitions (admin/customer-user/supplier-user) and their allowed paths
   security.py        Password hashing (PBKDF2-HMAC-SHA256)
   pdf.py             Renders a customer's or supplier's ledger to a paginated PDF (ReportLab)
   database.py        SQLAlchemy engine/session
-  models.py          User, Customer, Transaction, Supplier, SupplierTransaction ORM models
+  models.py          User (with role), Customer, Transaction, Supplier, SupplierTransaction ORM models
   schemas.py         Pydantic request/response models
   crud.py            Query layer shared by API + pages (customer and supplier sides)
   routers/
@@ -68,15 +72,30 @@ Dockerfile             Builds the app image (used by the `app`, `import` and `im
 docker-compose.yml     db (Postgres) + app (FastAPI) + import + import-suppliers (one-off loaders, `--profile tools`)
 ```
 
-## Authentication
+## Authentication & roles
 
 Every page and API route requires a logged-in session except `/login` and
 static assets. There's no self-service signup — accounts are created via
 the CLI or the `ADMIN_USERNAME`/`ADMIN_PASSWORD` bootstrap env vars.
 
+Each user also has a `role`, checked by the same middleware on every request:
+
+| Role | Can reach | Home page |
+| - | - | - |
+| `admin` | Everything — dashboard, customers, transactions, suppliers, supplier transactions | `/` |
+| `customer-user` | Customers + their transactions only (`/customers`, `/transactions`, and the matching `/api/*` routes) | `/customers` |
+| `supplier-user` | Suppliers + their transactions only (`/suppliers`, `/supplier-transactions`) | `/suppliers` |
+
+A request outside a role's allowed paths is redirected to that role's home
+page (a 403 for API/HTMX calls) instead of erroring, and the nav bar only
+shows links a role can actually open. `admin` is the default for new
+accounts, so it's the one to use for anyone who should see the whole
+business.
+
 - **First account**: set `ADMIN_USERNAME` and `ADMIN_PASSWORD` in `.env`
-  before the first `docker compose up`. The app creates that user on
-  startup *only if no users exist yet* — remove those two vars afterwards.
+  before the first `docker compose up`. The app creates that user (as
+  `admin`) on startup *only if no users exist yet* — remove those two vars
+  afterwards.
 - **Add or reset a user**:
 
   ```bash
@@ -84,7 +103,19 @@ the CLI or the `ADMIN_USERNAME`/`ADMIN_PASSWORD` bootstrap env vars.
   ```
 
   (drop `-it app` and run `python -m scripts.create_user someone` directly
-  if you're running without Docker).
+  if you're running without Docker). This defaults new accounts to `admin`.
+
+- **Create a restricted account**, pass `--role`:
+
+  ```bash
+  docker compose run --rm -it app python -m scripts.create_user acme_customer --role customer-user
+  docker compose run --rm -it app python -m scripts.create_user acme_supplier --role supplier-user
+  ```
+
+  Re-running `create_user` on an existing username resets that account's
+  password; add `--role` to also change its role (e.g. to promote someone to
+  `admin`). Valid roles: `admin`, `customer-user`, `supplier-user`.
+
 - **`SECRET_KEY`**: signs the session cookie. Set it to a fixed random value
   in `.env` for any real deployment — generate one with
   `python -c "import secrets; print(secrets.token_hex(32))"`. If it's left
@@ -98,7 +129,7 @@ runs as a non-root user, ships with a container healthcheck).
 
 1. **Configure**: copy `.env.example` to `.env` and set `POSTGRES_PASSWORD`,
    `SECRET_KEY`, and `ADMIN_USERNAME`/`ADMIN_PASSWORD` (see
-   [Authentication](#authentication) above). Don't skip this for anything
+   [Authentication & roles](#authentication--roles) above). Don't skip this for anything
    beyond a throwaway local test.
 
 2. **Build and start**:
