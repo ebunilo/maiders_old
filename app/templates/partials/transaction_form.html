@@ -33,11 +33,27 @@
       </div>
       <div class="col-6">
         <label class="form-label small">Amount Debit</label>
-        <input type="number" step="0.01" class="form-control form-control-sm" name="amount_dr" value="0">
+        <input
+          type="text"
+          inputmode="decimal"
+          class="form-control form-control-sm"
+          data-target="txn-amount-dr"
+          value="0.00"
+          oninput="formatTxnAmountInput(this)"
+        >
+        <input type="hidden" id="txn-amount-dr" name="amount_dr" value="0">
       </div>
       <div class="col-6">
         <label class="form-label small">Amount Credit</label>
-        <input type="number" step="0.01" class="form-control form-control-sm" name="amount_cr" value="0">
+        <input
+          type="text"
+          inputmode="decimal"
+          class="form-control form-control-sm"
+          data-target="txn-amount-cr"
+          value="0.00"
+          oninput="formatTxnAmountInput(this)"
+        >
+        <input type="hidden" id="txn-amount-cr" name="amount_cr" value="0">
       </div>
       <div class="col-6">
         <label class="form-label small">Payment Mode</label>
@@ -59,5 +75,34 @@
     document.getElementById('txn-customer-name').value = name;
     document.getElementById('txn-customer-id').value = id;
     document.getElementById('txn-customer-suggestions').innerHTML = '';
+  }
+
+  function formatTxnAmountInput(input) {
+    const hidden = document.getElementById(input.dataset.target);
+
+    let digits = input.value.replace(/[^\d.]/g, '');
+    const firstDot = digits.indexOf('.');
+    if (firstDot !== -1) {
+      digits = digits.slice(0, firstDot + 1) + digits.slice(firstDot + 1).replace(/\./g, '');
+    }
+
+    if (digits === '') {
+      input.value = '';
+      hidden.value = '0';
+      return;
+    }
+
+    const [rawInt, rawDec] = digits.split('.');
+    const intPart = (rawInt || '').replace(/^0+(?=\d)/, '');
+    const intFormatted = intPart ? Number(intPart).toLocaleString('en-US') : '0';
+
+    if (rawDec !== undefined) {
+      const decPart = rawDec.slice(0, 2);
+      input.value = intFormatted + '.' + decPart;
+      hidden.value = (intPart || '0') + '.' + decPart.padEnd(2, '0');
+    } else {
+      input.value = intFormatted + '.00';
+      hidden.value = (intPart || '0') + '.00';
+    }
   }
 </script>
