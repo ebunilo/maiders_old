@@ -292,7 +292,7 @@ def transaction_customer_lookup(
 @router.post("/transactions/new", response_class=HTMLResponse)
 def create_transaction_from_form(
     request: Request,
-    customer_id: int | None = Form(None),
+    customer_id: str | None = Form(None),
     customer_name: str = Form(...),
     date_posted: datetime.date = Form(...),
     details: str | None = Form(None),
@@ -303,7 +303,10 @@ def create_transaction_from_form(
     db: Session = Depends(get_db),
 ):
     data = schemas.TransactionCreate(
-        customer_id=customer_id,
+        # The hidden customer_id field is blank ("") whenever the user
+        # types a brand-new customer name instead of picking a suggestion --
+        # int | None = Form(None) would 422 on that empty string.
+        customer_id=int(customer_id) if customer_id else None,
         customer_name=customer_name,
         date_posted=date_posted,
         details=details,
@@ -506,34 +509,42 @@ def supplier_transaction_supplier_lookup(
 @router.post("/supplier-transactions/new", response_class=HTMLResponse)
 def create_supplier_transaction_from_form(
     request: Request,
-    supplier_id: int | None = Form(None),
+    supplier_id: str | None = Form(None),
     supplier_name: str = Form(...),
     date_posted: datetime.date = Form(...),
     details: str | None = Form(None),
-    amount_dr: float = Form(0),
     amount_cr: float = Form(0),
     payment_mode: str | None = Form(None),
     account_used: str | None = Form(None),
     item_name: str | None = Form(None),
     measures: str | None = Form(None),
-    quantity: float | None = Form(None),
-    unit_cost: float | None = Form(None),
+    quantity: str | None = Form(None),
+    unit_cost: str | None = Form(None),
     vehicle_no: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
+    # Left blank for a payment (credit) entry, where quantity/unit cost
+    # don't apply -- the browser still submits the field as "", which
+    # float-parses to a 422 if passed through as-is.
+    quantity_val = float(quantity) if quantity else None
+    unit_cost_val = float(unit_cost) if unit_cost else None
     data = schemas.SupplierTransactionCreate(
-        supplier_id=supplier_id,
+        # Blank ("") whenever the user types a brand-new supplier name
+        # instead of picking a suggestion -- see customer_id above.
+        supplier_id=int(supplier_id) if supplier_id else None,
         supplier_name=supplier_name,
         date_posted=date_posted,
         details=details,
-        amount_dr=amount_dr,
+        # Debit (goods received) is derived from quantity x unit cost rather
+        # than typed in directly, so it always matches the line-item detail.
+        amount_dr=(quantity_val or 0) * (unit_cost_val or 0),
         amount_cr=amount_cr,
         payment_mode=payment_mode,
         account_used=account_used,
         item_name=item_name,
         measures=measures,
-        quantity=quantity,
-        unit_cost=unit_cost,
+        quantity=quantity_val,
+        unit_cost=unit_cost_val,
         vehicle_no=vehicle_no,
     )
     crud.create_supplier_transaction(db, data)
