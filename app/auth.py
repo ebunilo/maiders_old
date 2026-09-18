@@ -35,7 +35,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 return JSONResponse({"detail": "Outside permitted login hours"}, status_code=401)
             return RedirectResponse(url="/login?blocked=hours", status_code=303)
 
-        if path_allowed(role, path, request.method):
+        if path_allowed(role, path):
             return await call_next(request)
 
         home = home_for(role)
