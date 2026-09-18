@@ -32,12 +32,10 @@ _ROLE_PREFIXES = {
 _CUSTOMER_CREATE_PATHS = ("/api/customers", "/customers/new")
 
 
-def path_allowed(role: str, path: str, method: str = "GET") -> bool:
+def path_allowed(role: str, path: str) -> bool:
     """Admins (or any unrecognized role prefix set) get everything; the
-    other roles only get their own prefixes, and only admins may delete.
-    Any role may create a new customer."""
-    if method == "DELETE" and role != ADMIN:
-        return False
+    other roles only get their own prefixes. Any role may create a new
+    customer."""
     if path in _CUSTOMER_CREATE_PATHS:
         return True
     if role == ADMIN:

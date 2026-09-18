@@ -90,9 +90,9 @@ A request outside a role's allowed paths is redirected to that role's home
 page (a 403 for API/HTMX calls) instead of erroring, and the nav bar only
 shows links a role can actually open. `admin` is the default for new
 accounts, so it's the one to use for anyone who should see the whole
-business. Only `admin` can delete a transaction — `customer-user` and
-`supplier-user` don't get the delete button, and the endpoint rejects them
-even if called directly.
+business. Any role can delete a transaction within its own allowed paths —
+`customer-user` and `supplier-user` get the delete button just like `admin`
+does.
 
 `customer-user` and `supplier-user` are also restricted to signing in
 **Monday-Saturday, 8:00 AM-6:30 PM WAT** — no access at all on Sundays
