@@ -32,15 +32,38 @@
         <input class="form-control form-control-sm" name="details">
       </div>
       <div class="col-6">
+        <label class="form-label small">Quantity</label>
+        <input
+          type="number"
+          step="0.001"
+          class="form-control form-control-sm"
+          id="txn-quantity"
+          name="quantity"
+          oninput="computeSupplierAmountDr()"
+        >
+      </div>
+      <div class="col-6">
+        <label class="form-label small">Unit Cost</label>
+        <input
+          type="number"
+          step="0.01"
+          class="form-control form-control-sm"
+          id="txn-unit-cost"
+          name="unit_cost"
+          oninput="computeSupplierAmountDr()"
+        >
+      </div>
+      <div class="col-6">
         <label class="form-label small">Amount Debit (Goods Received)</label>
         <input
           type="text"
-          inputmode="decimal"
           class="form-control form-control-sm"
-          data-target="txn-amount-dr"
-          oninput="formatTxnAmountInput(this)"
+          id="txn-amount-dr-display"
+          value="0.00"
+          readonly
+          tabindex="-1"
         >
-        <input type="hidden" id="txn-amount-dr" name="amount_dr" value="0">
+        <div class="form-text">Calculated from quantity &times; unit cost.</div>
       </div>
       <div class="col-6">
         <label class="form-label small">Amount Credit (Payment Made)</label>
@@ -65,17 +88,9 @@
         <label class="form-label small">Item Name</label>
         <input class="form-control form-control-sm" name="item_name">
       </div>
-      <div class="col-3">
-        <label class="form-label small">Quantity</label>
-        <input type="number" step="0.001" class="form-control form-control-sm" name="quantity">
-      </div>
-      <div class="col-3">
+      <div class="col-6">
         <label class="form-label small">Measures</label>
         <input class="form-control form-control-sm" name="measures" placeholder="e.g. Tons">
-      </div>
-      <div class="col-6">
-        <label class="form-label small">Unit Cost</label>
-        <input type="number" step="0.01" class="form-control form-control-sm" name="unit_cost">
       </div>
       <div class="col-6">
         <label class="form-label small">Vehicle No</label>
@@ -93,6 +108,16 @@
     document.getElementById('txn-supplier-name').value = name;
     document.getElementById('txn-supplier-id').value = id;
     document.getElementById('txn-supplier-suggestions').innerHTML = '';
+  }
+
+  function computeSupplierAmountDr() {
+    const qty = parseFloat(document.getElementById('txn-quantity').value) || 0;
+    const cost = parseFloat(document.getElementById('txn-unit-cost').value) || 0;
+    const total = qty * cost;
+    document.getElementById('txn-amount-dr-display').value = total.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
   }
 
   function formatTxnAmountInput(input) {
