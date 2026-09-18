@@ -26,12 +26,20 @@ _ROLE_PREFIXES = {
     SUPPLIER_USER: _SUPPLIER_PREFIXES,
 }
 
+# Creating a customer record is open to every role, including
+# supplier-user, which otherwise has no access to the customer prefixes
+# at all (the JSON endpoint plus the HTMX form page it powers).
+_CUSTOMER_CREATE_PATHS = ("/api/customers", "/customers/new")
+
 
 def path_allowed(role: str, path: str, method: str = "GET") -> bool:
     """Admins (or any unrecognized role prefix set) get everything; the
-    other roles only get their own prefixes, and only admins may delete."""
+    other roles only get their own prefixes, and only admins may delete.
+    Any role may create a new customer."""
     if method == "DELETE" and role != ADMIN:
         return False
+    if path in _CUSTOMER_CREATE_PATHS:
+        return True
     if role == ADMIN:
         return True
     prefixes = _ROLE_PREFIXES.get(role, ())
