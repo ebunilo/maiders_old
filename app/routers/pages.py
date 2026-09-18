@@ -106,6 +106,43 @@ def customers_page(
     return templates.TemplateResponse(request, "customers.html", ctx)
 
 
+@router.get("/customers/new", response_class=HTMLResponse)
+def new_customer_form(request: Request):
+    return templates.TemplateResponse(
+        request,
+        "partials/customer_form.html",
+        {"error": None, "code": "", "name": ""},
+    )
+
+
+@router.post("/customers/new", response_class=HTMLResponse)
+def create_customer_from_form(
+    request: Request,
+    code: str = Form(...),
+    name: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    code = code.strip()
+    name = name.strip()
+    if crud.get_customer_by_code(db, code):
+        return templates.TemplateResponse(
+            request,
+            "partials/customer_form.html",
+            {"error": "A customer with that code already exists.", "code": code, "name": name},
+        )
+    crud.create_customer(db, schemas.CustomerCreate(code=code, name=name))
+
+    response = templates.TemplateResponse(
+        request,
+        "partials/customer_form_success.html",
+        {"code": code, "name": name},
+    )
+    # Lets any results table on the current page (e.g. the customers list)
+    # refresh itself without this modal needing to know if one is present.
+    response.headers["HX-Trigger"] = "customerCreated"
+    return response
+
+
 @router.get("/customers/{customer_id}", response_class=HTMLResponse)
 def customer_detail(
     customer_id: int,
