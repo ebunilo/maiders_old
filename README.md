@@ -45,6 +45,19 @@ role-based access (admin / customer-user / supplier-user).
   depending on which way the balance runs). "Download / Print PDF" on a
   customer's or supplier's page opens it in a new tab, from which the
   browser's PDF viewer can print or save it.
+- **Management reports** ("Reports" in the nav, open to every role):
+  `/reports/debtors` lists everyone who owes us money (customers with a
+  debit balance); `/reports/creditors` everyone we owe money to, in two
+  sections — suppliers with a balance in their favour, and customers who
+  have paid more than they've been billed. Largest first, with subtotals,
+  a grand total and each party's last activity date. Rows only link to a
+  statement the viewer's role can open. An optional "As of" date restricts
+  balances to transactions posted on or before it, and "Show ageing"
+  splits each balance into 0-30 / 31-60 / 61-90 / 90+ day buckets
+  (payments are assumed to settle the oldest entries first, so the
+  outstanding balance is aged by the party's most recent entries). Both
+  pages are print-friendly: the browser's Print hides the nav/controls and
+  adds a company letterhead, with column headers repeated on every A4 page.
 
 ```text
 app/
@@ -62,7 +75,7 @@ app/
     customers.py     /api/customers
     transactions.py  /api/transactions
     dashboard.py     /api/dashboard
-    pages.py         HTML pages (/, /customers, /transactions, /suppliers, /supplier-transactions, ...)
+    pages.py         HTML pages (/, /customers, /transactions, /suppliers, /supplier-transactions, /reports/*, ...)
   templates/         Jinja2 templates (Bootstrap + HTMX, Chart.js for the dashboard)
 scripts/
   import_csv.py           Loads the customer CSV into the database
@@ -82,9 +95,9 @@ Each user also has a `role`, checked by the same middleware on every request:
 
 | Role | Can reach | Home page |
 | - | - | - |
-| `admin` | Everything — dashboard, customers, transactions, suppliers, supplier transactions | `/` |
-| `customer-user` | Customers + their transactions only (`/customers`, `/transactions`, and the matching `/api/*` routes) | `/customers` |
-| `supplier-user` | Suppliers + their transactions only (`/suppliers`, `/supplier-transactions`) | `/suppliers` |
+| `admin` | Everything — dashboard, customers, transactions, suppliers, supplier transactions, debtors/creditors reports | `/` |
+| `customer-user` | Customers + their transactions (`/customers`, `/transactions`, and the matching `/api/*` routes), plus the debtors/creditors reports | `/customers` |
+| `supplier-user` | Suppliers + their transactions (`/suppliers`, `/supplier-transactions`), plus the debtors/creditors reports | `/suppliers` |
 
 A request outside a role's allowed paths is redirected to that role's home
 page (a 403 for API/HTMX calls) instead of erroring, and the nav bar only

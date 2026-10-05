@@ -43,6 +43,13 @@
             <a class="nav-link {% if active == 'supplier_transactions' %}active fw-bold{% endif %}" href="/supplier-transactions">Supplier Transactions</a>
           </li>
           {% endif %}
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle {% if active == 'reports' %}active fw-bold{% endif %}" href="#" role="button" data-bs-toggle="dropdown">Reports</a>
+            <ul class="dropdown-menu">
+              <li><a class="dropdown-item" href="/reports/debtors">Debtors List</a></li>
+              <li><a class="dropdown-item" href="/reports/creditors">Creditors List</a></li>
+            </ul>
+          </li>
         </ul>
         <button
           class="btn btn-outline-light btn-sm me-3"

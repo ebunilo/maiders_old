@@ -8,9 +8,9 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from app import crud, schemas
+from app import authz, crud, schemas
 from app.database import get_db
-from app.pdf import build_customer_ledger_pdf, build_supplier_ledger_pdf
+from app.pdf import COMPANY_NAME, build_customer_ledger_pdf, build_supplier_ledger_pdf
 
 router = APIRouter(tags=["pages"])
 templates = Jinja2Templates(directory="app/templates")
@@ -572,3 +572,69 @@ def delete_supplier_transaction_from_ui(
     if txn:
         crud.delete_supplier_transaction(db, txn)
     return HTMLResponse("")
+
+
+# --- Management reports -------------------------------------------------
+# Open to every role (see _REPORT_PREFIXES in app/authz.py), even though
+# each report spans both customers and suppliers.
+
+
+def _parse_as_of(as_of: str | None) -> datetime.date | None:
+    # The report's date input is submitted as "" when cleared, which a
+    # datetime.date query param would 422 on.
+    if not as_of:
+        return None
+    try:
+        return datetime.date.fromisoformat(as_of)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid as_of date")
+
+
+def _balance_report(
+    request: Request, kind: str, as_of: datetime.date | None, ageing: bool, sections: list[dict]
+):
+    role = request.session.get("role", authz.ADMIN)
+    for section in sections:
+        # Only link a row to its statement if this role can open it --
+        # e.g. a customer-user sees suppliers here but can't drill in.
+        section["can_link"] = authz.path_allowed(role, section["detail_prefix"] + "0")
+    return templates.TemplateResponse(
+        request,
+        "balance_report.html",
+        {
+            "kind": kind,
+            "sections": sections,
+            "count": sum(len(s["rows"]) for s in sections),
+            "grand_total": sum((s["total"] for s in sections), 0),
+            "ageing": ageing,
+            "age_buckets": crud.AGE_BUCKETS,
+            "as_of": as_of,
+            "generated_at": datetime.datetime.now(),
+            "company_name": COMPANY_NAME,
+            "active": "reports",
+        },
+    )
+
+
+@router.get("/reports/debtors", response_class=HTMLResponse)
+def debtors_report(
+    request: Request,
+    as_of: str | None = None,
+    ageing: bool = False,
+    db: Session = Depends(get_db),
+):
+    as_of_date = _parse_as_of(as_of)
+    sections = crud.debtors_report(db, as_of=as_of_date, ageing=ageing)
+    return _balance_report(request, "debtors", as_of_date, ageing, sections)
+
+
+@router.get("/reports/creditors", response_class=HTMLResponse)
+def creditors_report(
+    request: Request,
+    as_of: str | None = None,
+    ageing: bool = False,
+    db: Session = Depends(get_db),
+):
+    as_of_date = _parse_as_of(as_of)
+    sections = crud.creditors_report(db, as_of=as_of_date, ageing=ageing)
+    return _balance_report(request, "creditors", as_of_date, ageing, sections)

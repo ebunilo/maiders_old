@@ -676,3 +676,161 @@ def list_supplier_form_ids(db: Session) -> list[str]:
         .order_by(models.SupplierTransaction.form_id)
     ).all()
     return [r for r in rows if r]
+
+
+# --- Management reports ----------------------------------------------------
+# A party's balance is sum(amount_dr) - sum(amount_cr) on both sides, but it
+# means opposite things: a positive customer balance is owed TO us, a
+# positive supplier balance is owed BY us. So "who owes whom" is picked per
+# side with `side`: "dr" selects parties whose debits exceed their credits,
+# "cr" the reverse, and the outstanding amount is always reported positive.
+
+AGE_BUCKETS = ("0-30 days", "31-60 days", "61-90 days", "Over 90 days")
+
+
+def _age_bucket(days: int) -> int:
+    if days <= 30:
+        return 0
+    if days <= 60:
+        return 1
+    if days <= 90:
+        return 2
+    return 3
+
+
+def _outstanding_balances(
+    db: Session,
+    party_model,
+    txn_model,
+    fk_column,
+    side: str,
+    as_of: datetime.date | None = None,
+) -> list[dict]:
+    """Every party whose balance is on `side`, with totals and last activity
+    date, largest outstanding amount first. With `as_of`, only transactions
+    posted on or before that date count, so the report can be re-run for a
+    past period end."""
+    total_dr = func.coalesce(func.sum(txn_model.amount_dr), 0)
+    total_cr = func.coalesce(func.sum(txn_model.amount_cr), 0)
+    outstanding = (total_dr - total_cr) if side == "dr" else (total_cr - total_dr)
+    stmt = (
+        select(
+            party_model.id,
+            party_model.code,
+            party_model.name,
+            total_dr.label("total_dr"),
+            total_cr.label("total_cr"),
+            outstanding.label("balance"),
+            func.max(txn_model.date_posted).label("last_activity"),
+        )
+        .join(txn_model, fk_column == party_model.id)
+        .group_by(party_model.id)
+        .having(outstanding > 0)
+        .order_by(outstanding.desc(), party_model.name)
+    )
+    if as_of:
+        stmt = stmt.where(txn_model.date_posted <= as_of)
+    return [row._asdict() for row in db.execute(stmt).all()]
+
+
+def _age_balances(
+    db: Session,
+    rows: list[dict],
+    txn_model,
+    fk_column,
+    side: str,
+    as_of: datetime.date | None = None,
+) -> None:
+    """Split each row's outstanding balance into AGE_BUCKETS (adds an
+    `ageing` list to every row). Payments are assumed to settle the oldest
+    entries first, so whatever is still outstanding is made up of the most
+    recent entries on `side` -- e.g. a debtor's balance is aged by their
+    latest invoices, walking back until the balance is covered. Age is
+    measured from `as_of` (or today)."""
+    reference = as_of or datetime.date.today()
+    if not rows:
+        return
+    amount_col = txn_model.amount_dr if side == "dr" else txn_model.amount_cr
+    stmt = (
+        select(fk_column, txn_model.date_posted, amount_col)
+        .where(fk_column.in_([r["id"] for r in rows]), amount_col > 0)
+        .order_by(fk_column, txn_model.date_posted.desc(), txn_model.id.desc())
+    )
+    if as_of:
+        stmt = stmt.where(txn_model.date_posted <= as_of)
+
+    entries: dict[int, list[tuple[datetime.date, Decimal]]] = {}
+    for party_id, date_posted, amount in db.execute(stmt).all():
+        entries.setdefault(party_id, []).append((date_posted, amount))
+
+    for row in rows:
+        ageing = [Decimal("0")] * len(AGE_BUCKETS)
+        remaining = Decimal(row["balance"])
+        for date_posted, amount in entries.get(row["id"], []):
+            if remaining <= 0:
+                break
+            take = min(remaining, Decimal(amount))
+            ageing[_age_bucket((reference - date_posted).days)] += take
+            remaining -= take
+        # Can't normally happen (the balance never exceeds that side's
+        # total), but never let the buckets drift from the balance.
+        if remaining > 0:
+            ageing[-1] += remaining
+        row["ageing"] = ageing
+
+
+def _report_section(
+    db: Session,
+    title: str,
+    party: str,
+    detail_prefix: str,
+    party_model,
+    txn_model,
+    fk_column,
+    side: str,
+    as_of: datetime.date | None,
+    ageing: bool,
+) -> dict:
+    rows = _outstanding_balances(db, party_model, txn_model, fk_column, side, as_of)
+    if ageing:
+        _age_balances(db, rows, txn_model, fk_column, side, as_of)
+    return {
+        "title": title,
+        "party": party,
+        "detail_prefix": detail_prefix,
+        "rows": rows,
+        "total": sum((r["balance"] for r in rows), Decimal("0")),
+        "ageing_totals": [
+            sum((r["ageing"][i] for r in rows), Decimal("0")) for i in range(len(AGE_BUCKETS))
+        ]
+        if ageing
+        else None,
+    }
+
+
+def debtors_report(db: Session, as_of: datetime.date | None = None, ageing: bool = False) -> list[dict]:
+    """Everyone who owes us money: customers with a debit balance."""
+    return [
+        _report_section(
+            db, "Customers", "Customer", "/customers/",
+            models.Customer, models.Transaction, models.Transaction.customer_id,
+            "dr", as_of, ageing,
+        ),
+    ]
+
+
+def creditors_report(db: Session, as_of: datetime.date | None = None, ageing: bool = False) -> list[dict]:
+    """Everyone we owe money to: suppliers with a balance in their favour,
+    plus customers who have paid more than they've been billed."""
+    return [
+        _report_section(
+            db, "Suppliers", "Supplier", "/suppliers/",
+            models.Supplier, models.SupplierTransaction, models.SupplierTransaction.supplier_id,
+            "dr", as_of, ageing,
+        ),
+        _report_section(
+            db, "Customers in credit (overpaid)", "Customer", "/customers/",
+            models.Customer, models.Transaction, models.Transaction.customer_id,
+            "cr", as_of, ageing,
+        ),
+    ]

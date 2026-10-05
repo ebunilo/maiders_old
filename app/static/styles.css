@@ -23,3 +23,106 @@ body {
   color: #146c43;
   font-weight: 600;
 }
+
+/* --- Printable reports (debtors/creditors) --- */
+.print-only {
+  display: none;
+}
+.report-table tfoot tr:first-child td {
+  border-top: 2px solid #212529;
+}
+.report-section-title {
+  margin-top: 1.5rem;
+}
+.report-grand-total {
+  text-align: right;
+  font-size: 1.1rem;
+  border-top: 3px double #212529;
+  padding-top: 0.5rem;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+  body {
+    background: #fff !important;
+  }
+  nav.navbar,
+  .modal,
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block;
+  }
+  main.container-fluid {
+    padding: 0 !important;
+  }
+  .report-header {
+    text-align: center;
+    border-bottom: 2px solid #000;
+    padding-bottom: 6px;
+    margin-bottom: 12px;
+  }
+  .report-company {
+    font-size: 16pt;
+    font-weight: 700;
+  }
+  .report-title {
+    font-size: 13pt;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .report-meta {
+    font-size: 9pt;
+    color: #444;
+  }
+  .report-summary .kpi-card {
+    box-shadow: none;
+    border: 1px solid #999;
+  }
+  .report-summary .kpi-card,
+  .report-summary .kpi-card * {
+    color: #000 !important;
+  }
+  .report-table {
+    font-size: 8.5pt;
+  }
+  .report-table > :not(caption) > * > * {
+    padding: 2px 4px;
+  }
+  .report-table td.text-end,
+  .report-table th.text-end {
+    white-space: nowrap;
+  }
+  .report-table,
+  .report-table * {
+    color: #000 !important;
+  }
+  /* Repeat column headers on every printed page, keep the totals row
+     only at the very end, and never split a row across pages. */
+  .report-table thead {
+    display: table-header-group;
+  }
+  .report-table tfoot {
+    display: table-row-group;
+  }
+  .report-table tr {
+    page-break-inside: avoid;
+  }
+  .report-section-title {
+    font-size: 11pt;
+    margin-top: 10px;
+    page-break-after: avoid;
+  }
+  .report-grand-total {
+    font-size: 10pt;
+    page-break-inside: avoid;
+  }
+  .report-table th {
+    border-bottom: 1.5px solid #000 !important;
+  }
+}
