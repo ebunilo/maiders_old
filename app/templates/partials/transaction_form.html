@@ -6,20 +6,27 @@
   <div class="modal-body">
     <div class="row g-2">
       <div class="col-12 position-relative">
-        <label class="form-label small">Customer Name</label>
-        <input
-          class="form-control form-control-sm"
-          id="txn-customer-name"
-          name="customer_name"
-          autocomplete="off"
-          required
-          hx-get="/transactions/customer-lookup"
-          hx-trigger="input changed delay:250ms"
-          hx-target="#txn-customer-suggestions"
-          hx-swap="innerHTML"
-          oninput="document.getElementById('txn-customer-id').value=''"
-          onblur="setTimeout(() => document.getElementById('txn-customer-suggestions').innerHTML='', 200)"
-        >
+        <label class="form-label small">Customer</label>
+        {# Search-only: typing just filters existing customers. A customer
+           must be picked from the list, which locks the field; nothing is
+           ever created from it (use + New Customer for that). #}
+        <div class="input-group input-group-sm">
+          <input
+            class="form-control"
+            id="txn-customer-name"
+            name="customer_name"
+            placeholder="Type to search, then pick a customer..."
+            autocomplete="off"
+            required
+            hx-get="/transactions/customer-lookup"
+            hx-trigger="input changed delay:250ms"
+            hx-target="#txn-customer-suggestions"
+            hx-swap="innerHTML"
+            onblur="setTimeout(() => document.getElementById('txn-customer-suggestions').innerHTML='', 200)"
+          >
+          <button class="btn btn-outline-secondary d-none" type="button" id="txn-customer-change"
+                  onclick="clearTxnCustomer()">Change</button>
+        </div>
         <input type="hidden" id="txn-customer-id" name="customer_id">
         <div id="txn-customer-suggestions" class="position-absolute w-100" style="z-index: 1056;"></div>
       </div>
@@ -65,14 +72,32 @@
   </div>
   <div class="modal-footer">
     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-    <button type="submit" class="btn btn-primary btn-sm" data-bs-dismiss="modal">Save Transaction</button>
+    <button type="submit" class="btn btn-primary btn-sm" id="txn-save" data-bs-dismiss="modal" disabled
+            title="Pick a customer first">Save Transaction</button>
   </div>
 </form>
 <script>
+  function setTxnCustomerLocked(locked) {
+    const input = document.getElementById('txn-customer-name');
+    input.readOnly = locked;
+    input.classList.toggle('bg-light', locked);
+    document.getElementById('txn-customer-change').classList.toggle('d-none', !locked);
+    document.getElementById('txn-save').disabled = !locked;
+  }
+
   function selectTxnCustomer(id, name) {
     document.getElementById('txn-customer-name').value = name;
     document.getElementById('txn-customer-id').value = id;
     document.getElementById('txn-customer-suggestions').innerHTML = '';
+    setTxnCustomerLocked(true);
+  }
+
+  function clearTxnCustomer() {
+    const input = document.getElementById('txn-customer-name');
+    input.value = '';
+    document.getElementById('txn-customer-id').value = '';
+    setTxnCustomerLocked(false);
+    input.focus();
   }
 
   function formatTxnAmountInput(input) {

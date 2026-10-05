@@ -2,7 +2,7 @@
   <h5 class="modal-title">New Customer</h5>
   <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
 </div>
-<form hx-post="/customers/new" hx-target="#customerModalContent" hx-swap="innerHTML">
+<form hx-post="/customers/new" hx-target="#formModalContent" hx-swap="innerHTML">
   <div class="modal-body">
     {% if error %}
     <div class="alert alert-danger py-2 small">{{ error }}</div>

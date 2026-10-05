@@ -7,11 +7,12 @@
       <th class="text-end">Total Cr</th>
       <th class="text-end">Balance</th>
       <th class="text-end"># Txns</th>
+      <th></th>
     </tr>
   </thead>
   <tbody>
   {% for c in customers %}
-    <tr class="cursor-pointer" onclick="window.location='/customers/{{ c.id }}'" style="cursor:pointer">
+    <tr class="cursor-pointer" onclick="if (!event.target.closest('button')) window.location='/customers/{{ c.id }}'" style="cursor:pointer">
       <td>{{ c.code }}</td>
       <td>{{ c.name }}</td>
       <td class="text-end amount-dr">₦{{ c.total_dr | money }}</td>
@@ -20,9 +21,19 @@
         ₦{{ c.balance | money }}
       </td>
       <td class="text-end">{{ c.transaction_count }}</td>
+      <td class="text-end">
+        <button
+          class="btn btn-sm btn-outline-danger py-0"
+          title="Delete (merge a duplicate into another customer)"
+          data-bs-toggle="modal"
+          data-bs-target="#formModal"
+          hx-get="/customers/{{ c.id }}/delete"
+          hx-target="#formModalContent"
+        >Delete</button>
+      </td>
     </tr>
   {% else %}
-    <tr><td colspan="6" class="text-center text-muted py-4">No customers found.</td></tr>
+    <tr><td colspan="7" class="text-center text-muted py-4">No customers found.</td></tr>
   {% endfor %}
   </tbody>
 </table>

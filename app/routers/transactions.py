@@ -39,7 +39,10 @@ def list_transactions(
 
 @router.post("", response_model=schemas.TransactionOut, status_code=201)
 def create_transaction(data: schemas.TransactionCreate, db: Session = Depends(get_db)):
-    return crud.create_transaction(db, data)
+    try:
+        return crud.create_transaction(db, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get("/{transaction_id}", response_model=schemas.TransactionOut)

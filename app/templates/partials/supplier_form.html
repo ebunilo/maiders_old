@@ -1,0 +1,25 @@
+<div class="modal-header">
+  <h5 class="modal-title">New Supplier</h5>
+  <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+<form hx-post="/suppliers/new" hx-target="#formModalContent" hx-swap="innerHTML">
+  <div class="modal-body">
+    {% if error %}
+    <div class="alert alert-danger py-2 small">{{ error }}</div>
+    {% endif %}
+    <div class="row g-2">
+      <div class="col-12">
+        <label class="form-label small">Name</label>
+        <input class="form-control form-control-sm" name="name" value="{{ name }}" required autofocus>
+      </div>
+      <div class="col-12">
+        <label class="form-label small">Code <span class="text-muted">(optional &mdash; generated from the name if left blank)</span></label>
+        <input class="form-control form-control-sm" name="code" value="{{ code }}">
+      </div>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+    <button type="submit" class="btn btn-primary btn-sm">Save Supplier</button>
+  </div>
+</form>

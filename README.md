@@ -109,6 +109,29 @@ business. Any role can delete a transaction within its own allowed paths —
 `customer-user` and `supplier-user` get the delete button just like `admin`
 does.
 
+### Customers, suppliers and duplicates
+
+The same rules apply to both sides:
+
+- **New records are only created deliberately**: "+ New Customer" (navbar,
+  every role) or "+ New Supplier" (navbar, `admin` and `supplier-user`;
+  the code is optional and generated from the name if left blank). Both
+  refuse a name that already exists, ignoring case and spacing
+  ("ND  BEST" = "Nd Best").
+- **Posting a transaction never creates a customer or supplier.** The
+  Customer/Supplier field only searches existing records: one must be
+  picked from the suggestions, which locks the field (use "Change" to pick
+  another), and Save stays disabled until then. The server rejects a
+  posting without a valid pick, and `POST /api/transactions` likewise
+  returns 400 for an unknown customer instead of creating one.
+- **Deleting a duplicate**: "Delete" on a row of the Customers/Suppliers
+  list, or "Delete / Merge Duplicate" on a customer's/supplier's page
+  (`admin`, plus `customer-user` for customers and `supplier-user` for
+  suppliers). A record with transactions must first have them moved to the
+  one being kept (similar names are suggested), so no ledger entries are
+  lost; one with no transactions is simply deleted. This can't be undone,
+  so take a backup first if merging many.
+
 `customer-user` and `supplier-user` are also restricted to signing in
 **Monday-Saturday, 8:00 AM-6:30 PM WAT** — no access at all on Sundays
 (`app/authz.py`, checked against a fixed UTC+1 offset — not the host's local

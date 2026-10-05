@@ -54,18 +54,27 @@
         <button
           class="btn btn-outline-light btn-sm me-3"
           data-bs-toggle="modal"
-          data-bs-target="#customerModal"
+          data-bs-target="#formModal"
           hx-get="/customers/new"
-          hx-target="#customerModalContent"
+          hx-target="#formModalContent"
         >+ New Customer</button>
+        {% if role in ('admin', 'supplier-user') %}
+        <button
+          class="btn btn-outline-light btn-sm me-3"
+          data-bs-toggle="modal"
+          data-bs-target="#formModal"
+          hx-get="/suppliers/new"
+          hx-target="#formModalContent"
+        >+ New Supplier</button>
+        {% endif %}
         <span class="navbar-text text-light me-3 small">{{ request.session.get('username', '') }}</span>
         <a class="btn btn-outline-light btn-sm" href="/logout">Logout</a>
       </div>
     </div>
   </nav>
-  <div class="modal fade" id="customerModal" tabindex="-1">
+  <div class="modal fade" id="formModal" tabindex="-1">
     <div class="modal-dialog">
-      <div class="modal-content" id="customerModalContent">
+      <div class="modal-content" id="formModalContent">
         <!-- loaded via htmx -->
       </div>
     </div>

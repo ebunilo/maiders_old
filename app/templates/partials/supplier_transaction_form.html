@@ -6,20 +6,27 @@
   <div class="modal-body">
     <div class="row g-2">
       <div class="col-12 position-relative">
-        <label class="form-label small">Supplier Name</label>
-        <input
-          class="form-control form-control-sm"
-          id="txn-supplier-name"
-          name="supplier_name"
-          autocomplete="off"
-          required
-          hx-get="/supplier-transactions/supplier-lookup"
-          hx-trigger="input changed delay:250ms"
-          hx-target="#txn-supplier-suggestions"
-          hx-swap="innerHTML"
-          oninput="document.getElementById('txn-supplier-id').value=''"
-          onblur="setTimeout(() => document.getElementById('txn-supplier-suggestions').innerHTML='', 200)"
-        >
+        <label class="form-label small">Supplier</label>
+        {# Search-only: typing just filters existing suppliers. A supplier
+           must be picked from the list, which locks the field; nothing is
+           ever created from it (use + New Supplier for that). #}
+        <div class="input-group input-group-sm">
+          <input
+            class="form-control"
+            id="txn-supplier-name"
+            name="supplier_name"
+            placeholder="Type to search, then pick a supplier..."
+            autocomplete="off"
+            required
+            hx-get="/supplier-transactions/supplier-lookup"
+            hx-trigger="input changed delay:250ms"
+            hx-target="#txn-supplier-suggestions"
+            hx-swap="innerHTML"
+            onblur="setTimeout(() => document.getElementById('txn-supplier-suggestions').innerHTML='', 200)"
+          >
+          <button class="btn btn-outline-secondary d-none" type="button" id="txn-supplier-change"
+                  onclick="clearTxnSupplier()">Change</button>
+        </div>
         <input type="hidden" id="txn-supplier-id" name="supplier_id">
         <div id="txn-supplier-suggestions" class="position-absolute w-100" style="z-index: 1056;"></div>
       </div>
@@ -100,14 +107,32 @@
   </div>
   <div class="modal-footer">
     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-    <button type="submit" class="btn btn-primary btn-sm" data-bs-dismiss="modal">Save Transaction</button>
+    <button type="submit" class="btn btn-primary btn-sm" id="txn-supplier-save" data-bs-dismiss="modal" disabled
+            title="Pick a supplier first">Save Transaction</button>
   </div>
 </form>
 <script>
+  function setTxnSupplierLocked(locked) {
+    const input = document.getElementById('txn-supplier-name');
+    input.readOnly = locked;
+    input.classList.toggle('bg-light', locked);
+    document.getElementById('txn-supplier-change').classList.toggle('d-none', !locked);
+    document.getElementById('txn-supplier-save').disabled = !locked;
+  }
+
   function selectTxnSupplier(id, name) {
     document.getElementById('txn-supplier-name').value = name;
     document.getElementById('txn-supplier-id').value = id;
     document.getElementById('txn-supplier-suggestions').innerHTML = '';
+    setTxnSupplierLocked(true);
+  }
+
+  function clearTxnSupplier() {
+    const input = document.getElementById('txn-supplier-name');
+    input.value = '';
+    document.getElementById('txn-supplier-id').value = '';
+    setTxnSupplierLocked(false);
+    input.focus();
   }
 
   function computeSupplierAmountDr() {

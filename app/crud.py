@@ -1,7 +1,8 @@
 import datetime
+import difflib
 from decimal import Decimal
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app import models, schemas
@@ -25,19 +26,6 @@ def create_customer(db: Session, data: schemas.CustomerCreate) -> models.Custome
     return customer
 
 
-def get_or_create_customer(db: Session, code: str, name: str | None) -> models.Customer:
-    code = code.strip()
-    name = (name or code).strip()
-    customer = get_customer_by_code(db, code)
-    if customer:
-        return customer
-    customer = models.Customer(code=code, name=name)
-    db.add(customer)
-    db.commit()
-    db.refresh(customer)
-    return customer
-
-
 def find_customers_by_name(db: Session, query: str, limit: int = 8) -> list[models.Customer]:
     like = f"%{query.strip()}%"
     stmt = (
@@ -49,46 +37,102 @@ def find_customers_by_name(db: Session, query: str, limit: int = 8) -> list[mode
     return list(db.scalars(stmt).all())
 
 
-def generate_customer_code(db: Session, name: str) -> str:
-    """Derive a short, unique customer code from a name when the caller
-    doesn't supply one (e.g. new customers added from the transaction form)."""
-    base = "".join(ch for ch in name.upper() if ch.isalnum()) or "CUST"
-    base = base[:12]
-    code = base
-    suffix = 1
-    while db.scalar(select(models.Customer.id).where(models.Customer.code == code)):
-        suffix += 1
-        code = f"{base}{suffix}"
-    return code
+def _normalized_name(column):
+    """SQL expression for a name with case and runs of whitespace ignored,
+    so "ND  BEST" and "Nd Best" compare equal."""
+    return func.lower(func.regexp_replace(func.trim(column), r"\s+", " ", "g"))
+
+
+def _find_by_same_name(db: Session, party_model, name: str, exclude_id: int | None = None):
+    """An existing customer/supplier whose name matches `name` ignoring
+    case and spacing -- used to stop the same party being created twice."""
+    normalized = " ".join(name.split()).lower()
+    stmt = select(party_model).where(_normalized_name(party_model.name) == normalized)
+    if exclude_id:
+        stmt = stmt.where(party_model.id != exclude_id)
+    return db.scalar(stmt.order_by(party_model.id).limit(1))
+
+
+def _find_similar(db: Session, party_model, party, limit: int = 5) -> list:
+    """Other customers/suppliers whose names closely resemble `party`'s
+    (same name with different case/spacing, or a likely typo) -- the
+    probable originals when `party` is a duplicate."""
+    others = db.scalars(select(party_model).where(party_model.id != party.id)).all()
+    by_name: dict[str, list] = {}
+    for other in others:
+        by_name.setdefault(" ".join(other.name.split()).lower(), []).append(other)
+    target = " ".join(party.name.split()).lower()
+    matches = difflib.get_close_matches(target, list(by_name), n=limit, cutoff=0.8)
+    return [p for name in matches for p in by_name[name]][:limit]
+
+
+def _delete_party(db: Session, party_model, txn_model, fk_column, party, move_to=None) -> int:
+    """Delete a customer/supplier. If they have transactions, `move_to` is
+    required and every transaction is reassigned to that party first
+    (merging a duplicate into the original), so no ledger entries are lost.
+    Returns the number of transactions moved."""
+    label = party_model.__name__.lower()  # "customer" / "supplier"
+    count = db.scalar(select(func.count(txn_model.id)).where(fk_column == party.id))
+    if count and move_to is None:
+        raise ValueError(f"This {label} has transactions; choose a {label} to move them to")
+    if move_to is not None and move_to.id == party.id:
+        raise ValueError(f"Cannot move transactions to the {label} being deleted")
+
+    moved = 0
+    if count:
+        moved = db.execute(
+            update(txn_model).where(fk_column == party.id).values({fk_column.key: move_to.id})
+        ).rowcount
+    # Core delete rather than db.delete(party): the ORM relationship
+    # cascades deletes to any transactions it has loaded, which could be
+    # stale after the bulk update above.
+    db.execute(delete(party_model).where(party_model.id == party.id))
+    db.commit()
+    return moved
+
+
+def find_customer_by_same_name(
+    db: Session, name: str, exclude_id: int | None = None
+) -> models.Customer | None:
+    return _find_by_same_name(db, models.Customer, name, exclude_id)
+
+
+def find_similar_customers(db: Session, customer: models.Customer) -> list[models.Customer]:
+    return _find_similar(db, models.Customer, customer)
 
 
 def resolve_transaction_customer(db: Session, data: schemas.TransactionCreate) -> models.Customer:
-    """Find the customer a new transaction belongs to, preferring an explicit
-    id or code, and falling back to an exact (case-insensitive) name match
-    before creating a brand-new customer record with a generated code."""
+    """Find the EXISTING customer a new transaction belongs to, by id, code,
+    or exact (case-insensitive) name. Never creates one: new customers are
+    only added deliberately via the New Customer form, so a mistyped name
+    can't silently spawn a duplicate customer."""
     if data.customer_id:
         customer = get_customer(db, data.customer_id)
         if customer:
             return customer
 
     if data.customer_code:
-        return get_or_create_customer(db, data.customer_code, data.customer_name)
+        customer = get_customer_by_code(db, data.customer_code.strip())
+        if customer:
+            return customer
 
     name = (data.customer_name or "").strip()
-    if not name:
-        raise ValueError("customer_name, customer_code, or customer_id is required")
+    if name:
+        customer = db.scalar(
+            select(models.Customer).where(func.lower(models.Customer.name) == name.lower())
+        )
+        if customer:
+            return customer
 
-    customer = db.scalar(
-        select(models.Customer).where(func.lower(models.Customer.name) == name.lower())
+    raise ValueError("Customer not found -- create it with New Customer first")
+
+
+def delete_customer(
+    db: Session, customer: models.Customer, move_to: models.Customer | None = None
+) -> int:
+    return _delete_party(
+        db, models.Customer, models.Transaction, models.Transaction.customer_id, customer, move_to
     )
-    if customer:
-        return customer
-
-    customer = models.Customer(code=generate_customer_code(db, name), name=name)
-    db.add(customer)
-    db.commit()
-    db.refresh(customer)
-    return customer
 
 
 def list_customers(
@@ -363,19 +407,6 @@ def create_supplier(db: Session, data: schemas.SupplierCreate) -> models.Supplie
     return supplier
 
 
-def get_or_create_supplier(db: Session, code: str, name: str | None) -> models.Supplier:
-    code = code.strip()
-    name = (name or code).strip()
-    supplier = get_supplier_by_code(db, code)
-    if supplier:
-        return supplier
-    supplier = models.Supplier(code=code, name=name)
-    db.add(supplier)
-    db.commit()
-    db.refresh(supplier)
-    return supplier
-
-
 def find_suppliers_by_name(db: Session, query: str, limit: int = 8) -> list[models.Supplier]:
     like = f"%{query.strip()}%"
     stmt = (
@@ -388,6 +419,8 @@ def find_suppliers_by_name(db: Session, query: str, limit: int = 8) -> list[mode
 
 
 def generate_supplier_code(db: Session, name: str) -> str:
+    """Derive a short, unique supplier code from a name (the legacy data has
+    no separate supplier code), e.g. for the New Supplier form."""
     base = "".join(ch for ch in name.upper() if ch.isalnum()) or "SUPP"
     base = base[:12]
     code = base
@@ -398,32 +431,54 @@ def generate_supplier_code(db: Session, name: str) -> str:
     return code
 
 
+def find_supplier_by_same_name(
+    db: Session, name: str, exclude_id: int | None = None
+) -> models.Supplier | None:
+    return _find_by_same_name(db, models.Supplier, name, exclude_id)
+
+
+def find_similar_suppliers(db: Session, supplier: models.Supplier) -> list[models.Supplier]:
+    return _find_similar(db, models.Supplier, supplier)
+
+
 def resolve_supplier_transaction_supplier(
     db: Session, data: schemas.SupplierTransactionCreate
 ) -> models.Supplier:
+    """Find the EXISTING supplier a new transaction belongs to, by id, code,
+    or exact (case-insensitive) name. Never creates one -- see
+    resolve_transaction_customer."""
     if data.supplier_id:
         supplier = get_supplier(db, data.supplier_id)
         if supplier:
             return supplier
 
     if data.supplier_code:
-        return get_or_create_supplier(db, data.supplier_code, data.supplier_name)
+        supplier = get_supplier_by_code(db, data.supplier_code.strip())
+        if supplier:
+            return supplier
 
     name = (data.supplier_name or "").strip()
-    if not name:
-        raise ValueError("supplier_name, supplier_code, or supplier_id is required")
+    if name:
+        supplier = db.scalar(
+            select(models.Supplier).where(func.lower(models.Supplier.name) == name.lower())
+        )
+        if supplier:
+            return supplier
 
-    supplier = db.scalar(
-        select(models.Supplier).where(func.lower(models.Supplier.name) == name.lower())
+    raise ValueError("Supplier not found -- create it with New Supplier first")
+
+
+def delete_supplier(
+    db: Session, supplier: models.Supplier, move_to: models.Supplier | None = None
+) -> int:
+    return _delete_party(
+        db,
+        models.Supplier,
+        models.SupplierTransaction,
+        models.SupplierTransaction.supplier_id,
+        supplier,
+        move_to,
     )
-    if supplier:
-        return supplier
-
-    supplier = models.Supplier(code=generate_supplier_code(db, name), name=name)
-    db.add(supplier)
-    db.commit()
-    db.refresh(supplier)
-    return supplier
 
 
 def list_suppliers(
