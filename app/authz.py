@@ -20,10 +20,13 @@ ROLE_HOME = {
 
 _CUSTOMER_PREFIXES = ("/customers", "/transactions", "/api/customers", "/api/transactions")
 _SUPPLIER_PREFIXES = ("/suppliers", "/supplier-transactions")
+# The debtors/creditors management reports are open to every role, even
+# though each one covers both customers and suppliers.
+_REPORT_PREFIXES = ("/reports",)
 
 _ROLE_PREFIXES = {
-    CUSTOMER_USER: _CUSTOMER_PREFIXES,
-    SUPPLIER_USER: _SUPPLIER_PREFIXES,
+    CUSTOMER_USER: _CUSTOMER_PREFIXES + _REPORT_PREFIXES,
+    SUPPLIER_USER: _SUPPLIER_PREFIXES + _REPORT_PREFIXES,
 }
 
 # Creating a customer record is open to every role, including

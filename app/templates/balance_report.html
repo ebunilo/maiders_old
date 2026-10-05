@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% set is_debtors = kind == 'debtors' %}
+{% set title = 'Debtors List' if is_debtors else 'Creditors List' %}
+{% set ncols = 8 if ageing else 7 %}
+{% block title %}{{ title }} - Ledger{% endblock %}
+{% block content %}
+<div class="report">
+  <div class="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-3 no-print">
+    <div>
+      <h3 class="mb-0">{{ title }}</h3>
+      <div class="text-muted small">
+        {% if is_debtors %}Everyone who owes us money{% else %}Everyone we owe money to{% endif %}
+      </div>
+    </div>
+    <form class="d-flex align-items-end gap-2 flex-wrap" method="get">
+      <div>
+        <label class="form-label small text-muted mb-0" for="as_of">As of</label>
+        <input type="date" class="form-control form-control-sm" id="as_of" name="as_of"
+               value="{{ as_of or '' }}">
+      </div>
+      <div class="form-check mb-1">
+        <input class="form-check-input" type="checkbox" id="ageing" name="ageing" value="1"
+               {% if ageing %}checked{% endif %} onchange="this.form.submit()">
+        <label class="form-check-label small" for="ageing">Show ageing</label>
+      </div>
+      <button class="btn btn-sm btn-outline-secondary" type="submit">Apply</button>
+      {% if as_of or ageing %}<a class="btn btn-sm btn-link" href="?">Clear</a>{% endif %}
+      <button class="btn btn-sm btn-dark" type="button" onclick="window.print()">Print</button>
+    </form>
+  </div>
+
+  <header class="report-header print-only">
+    <div class="report-company">{{ company_name }}</div>
+    <div class="report-title">{{ title }}{% if ageing %} &mdash; Aged{% endif %}</div>
+    <div class="report-meta">
+      {% if as_of %}As of {{ as_of.strftime('%d %b %Y') }}{% else %}All transactions to date{% endif %}
+      &middot; Generated {{ generated_at.strftime('%d %b %Y, %H:%M') }}
+    </div>
+  </header>
+
+  <div class="d-flex gap-3 mb-3 flex-wrap report-summary">
+    <div class="card kpi-card p-2 px-3">
+      <div class="text-muted small">{{ 'Debtors' if is_debtors else 'Creditors' }}</div>
+      <div class="fw-bold">{{ count }}</div>
+    </div>
+    <div class="card kpi-card p-2 px-3">
+      <div class="text-muted small">{{ 'Total owed to us' if is_debtors else 'Total we owe' }}</div>
+      <div class="fw-bold balance-positive">₦{{ grand_total | money }}</div>
+    </div>
+    {% if sections | length > 1 %}
+      {% for s in sections %}
+      <div class="card kpi-card p-2 px-3">
+        <div class="text-muted small">{{ s.title }} ({{ s.rows | length }})</div>
+        <div class="fw-bold">₦{{ s.total | money }}</div>
+      </div>
+      {% endfor %}
+    {% endif %}
+  </div>
+
+  {% for s in sections %}
+  <section class="report-section">
+    {% if sections | length > 1 %}<h5 class="report-section-title">{{ s.title }}</h5>{% endif %}
+    <table class="table table-sm bg-white report-table">
+      <thead>
+        <tr>
+          <th class="text-end">#</th>
+          <th>Code</th>
+          <th>{{ s.party }}</th>
+          {% if ageing %}
+            {% for b in age_buckets %}<th class="text-end">{{ b }}</th>{% endfor %}
+          {% else %}
+            <th class="text-end">Total Dr</th>
+            <th class="text-end">Total Cr</th>
+          {% endif %}
+          <th class="text-end">Balance</th>
+          {% if not ageing %}<th class="text-end">Last Activity</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in s.rows %}
+        <tr>
+          <td class="text-end text-muted">{{ loop.index }}</td>
+          <td>{{ r.code }}</td>
+          <td>
+            {% if s.can_link %}
+              <a class="text-reset text-decoration-none" href="{{ s.detail_prefix }}{{ r.id }}">{{ r.name }}</a>
+            {% else %}{{ r.name }}{% endif %}
+          </td>
+          {% if ageing %}
+            {% for amount in r.ageing %}
+              <td class="text-end">{% if amount %}₦{{ amount | money }}{% else %}<span class="text-muted">&ndash;</span>{% endif %}</td>
+            {% endfor %}
+          {% else %}
+            <td class="text-end">₦{{ r.total_dr | money }}</td>
+            <td class="text-end">₦{{ r.total_cr | money }}</td>
+          {% endif %}
+          <td class="text-end fw-semibold">₦{{ r.balance | money }}</td>
+          {% if not ageing %}
+            <td class="text-end">{{ r.last_activity.strftime('%d/%m/%Y') if r.last_activity else '' }}</td>
+          {% endif %}
+        </tr>
+      {% else %}
+        <tr><td colspan="{{ ncols }}" class="text-center text-muted py-3">None.</td></tr>
+      {% endfor %}
+      </tbody>
+      {% if s.rows %}
+      <tfoot>
+        <tr class="fw-bold">
+          <td colspan="3" class="text-end">Total ({{ s.rows | length }})</td>
+          {% if ageing %}
+            {% for amount in s.ageing_totals %}<td class="text-end">₦{{ amount | money }}</td>{% endfor %}
+          {% else %}
+            <td colspan="2"></td>
+          {% endif %}
+          <td class="text-end">₦{{ s.total | money }}</td>
+          {% if not ageing %}<td></td>{% endif %}
+        </tr>
+        {% if ageing and s.total %}
+        <tr class="text-muted small">
+          <td colspan="3" class="text-end">% of total</td>
+          {% for amount in s.ageing_totals %}
+            <td class="text-end">{{ '%.1f' | format(amount / s.total * 100) }}%</td>
+          {% endfor %}
+          <td class="text-end">100%</td>
+        </tr>
+        {% endif %}
+      </tfoot>
+      {% endif %}
+    </table>
+  </section>
+  {% endfor %}
+
+  {% if sections | length > 1 %}
+  <div class="report-grand-total">
+    Grand total &mdash; {{ count }} {{ 'debtors' if is_debtors else 'creditors' }}:
+    <strong>₦{{ grand_total | money }}</strong>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
