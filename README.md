@@ -49,8 +49,10 @@ role-based access (admin / customer-user / supplier-user).
   `/reports/debtors` lists everyone who owes us money (customers with a
   debit balance); `/reports/creditors` everyone we owe money to, in two
   sections — suppliers with a balance in their favour, and customers who
-  have paid more than they've been billed. Largest first, with subtotals,
-  a grand total and each party's last activity date. Rows only link to a
+  have paid more than they've been billed. Every affected party gets a
+  line, in alphabetical order by default (or highest balance first via
+  "Sort by"), with subtotals, a grand total and each party's last activity
+  date. Rows only link to a
   statement the viewer's role can open. An optional "As of" date restricts
   balances to transactions posted on or before it, and "Show ageing"
   splits each balance into 0-30 / 31-60 / 61-90 / 90+ day buckets

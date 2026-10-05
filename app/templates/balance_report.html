@@ -18,13 +18,21 @@
         <input type="date" class="form-control form-control-sm" id="as_of" name="as_of"
                value="{{ as_of or '' }}">
       </div>
+      <div>
+        <label class="form-label small text-muted mb-0" for="sort">Sort by</label>
+        <select class="form-select form-select-sm" id="sort" name="sort" onchange="this.form.submit()">
+          {% for value, label in sorts.items() %}
+            <option value="{{ value }}" {% if value == sort %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
       <div class="form-check mb-1">
         <input class="form-check-input" type="checkbox" id="ageing" name="ageing" value="1"
                {% if ageing %}checked{% endif %} onchange="this.form.submit()">
         <label class="form-check-label small" for="ageing">Show ageing</label>
       </div>
       <button class="btn btn-sm btn-outline-secondary" type="submit">Apply</button>
-      {% if as_of or ageing %}<a class="btn btn-sm btn-link" href="?">Clear</a>{% endif %}
+      {% if as_of or ageing or sort != 'name' %}<a class="btn btn-sm btn-link" href="?">Clear</a>{% endif %}
       <button class="btn btn-sm btn-dark" type="button" onclick="window.print()">Print</button>
     </form>
   </div>
@@ -34,6 +42,7 @@
     <div class="report-title">{{ title }}{% if ageing %} &mdash; Aged{% endif %}</div>
     <div class="report-meta">
       {% if as_of %}As of {{ as_of.strftime('%d %b %Y') }}{% else %}All transactions to date{% endif %}
+      &middot; Sorted by {{ 'name' if sort == 'name' else 'balance, highest first' }}
       &middot; Generated {{ generated_at.strftime('%d %b %Y, %H:%M') }}
     </div>
   </header>

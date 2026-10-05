@@ -687,6 +687,9 @@ def list_supplier_form_ids(db: Session) -> list[str]:
 
 AGE_BUCKETS = ("0-30 days", "31-60 days", "61-90 days", "Over 90 days")
 
+# How report rows can be ordered; the first is the default.
+REPORT_SORTS = {"name": "Name (A-Z)", "balance": "Balance (highest first)"}
+
 
 def _age_bucket(days: int) -> int:
     if days <= 30:
@@ -705,9 +708,11 @@ def _outstanding_balances(
     fk_column,
     side: str,
     as_of: datetime.date | None = None,
+    sort: str = "name",
 ) -> list[dict]:
     """Every party whose balance is on `side`, with totals and last activity
-    date, largest outstanding amount first. With `as_of`, only transactions
+    date, in alphabetical order (or largest outstanding amount first with
+    sort="balance"). With `as_of`, only transactions
     posted on or before that date count, so the report can be re-run for a
     past period end."""
     total_dr = func.coalesce(func.sum(txn_model.amount_dr), 0)
@@ -726,8 +731,12 @@ def _outstanding_balances(
         .join(txn_model, fk_column == party_model.id)
         .group_by(party_model.id)
         .having(outstanding > 0)
-        .order_by(outstanding.desc(), party_model.name)
     )
+    name_order = (func.lower(party_model.name), party_model.id)
+    if sort == "balance":
+        stmt = stmt.order_by(outstanding.desc(), *name_order)
+    else:
+        stmt = stmt.order_by(*name_order)
     if as_of:
         stmt = stmt.where(txn_model.date_posted <= as_of)
     return [row._asdict() for row in db.execute(stmt).all()]
@@ -790,8 +799,9 @@ def _report_section(
     side: str,
     as_of: datetime.date | None,
     ageing: bool,
+    sort: str,
 ) -> dict:
-    rows = _outstanding_balances(db, party_model, txn_model, fk_column, side, as_of)
+    rows = _outstanding_balances(db, party_model, txn_model, fk_column, side, as_of, sort)
     if ageing:
         _age_balances(db, rows, txn_model, fk_column, side, as_of)
     return {
@@ -808,29 +818,33 @@ def _report_section(
     }
 
 
-def debtors_report(db: Session, as_of: datetime.date | None = None, ageing: bool = False) -> list[dict]:
+def debtors_report(
+    db: Session, as_of: datetime.date | None = None, ageing: bool = False, sort: str = "name"
+) -> list[dict]:
     """Everyone who owes us money: customers with a debit balance."""
     return [
         _report_section(
             db, "Customers", "Customer", "/customers/",
             models.Customer, models.Transaction, models.Transaction.customer_id,
-            "dr", as_of, ageing,
+            "dr", as_of, ageing, sort,
         ),
     ]
 
 
-def creditors_report(db: Session, as_of: datetime.date | None = None, ageing: bool = False) -> list[dict]:
+def creditors_report(
+    db: Session, as_of: datetime.date | None = None, ageing: bool = False, sort: str = "name"
+) -> list[dict]:
     """Everyone we owe money to: suppliers with a balance in their favour,
     plus customers who have paid more than they've been billed."""
     return [
         _report_section(
             db, "Suppliers", "Supplier", "/suppliers/",
             models.Supplier, models.SupplierTransaction, models.SupplierTransaction.supplier_id,
-            "dr", as_of, ageing,
+            "dr", as_of, ageing, sort,
         ),
         _report_section(
             db, "Customers in credit (overpaid)", "Customer", "/customers/",
             models.Customer, models.Transaction, models.Transaction.customer_id,
-            "cr", as_of, ageing,
+            "cr", as_of, ageing, sort,
         ),
     ]
