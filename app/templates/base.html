@@ -50,6 +50,11 @@
               <li><a class="dropdown-item" href="/reports/creditors">Creditors List</a></li>
             </ul>
           </li>
+          {% if role == 'admin' %}
+          <li class="nav-item">
+            <a class="nav-link {% if active == 'deleted_records' %}active fw-bold{% endif %}" href="/deleted-records">Deleted Records</a>
+          </li>
+          {% endif %}
         </ul>
         <button
           class="btn btn-outline-light btn-sm me-3"

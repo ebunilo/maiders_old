@@ -2,6 +2,7 @@ import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    JSON,
     DateTime,
     ForeignKey,
     Index,
@@ -122,4 +123,35 @@ class SupplierTransaction(Base):
 
     __table_args__ = (
         Index("ix_supplier_transactions_supplier_date", "supplier_id", "date_posted"),
+    )
+
+
+class DeletedRecord(Base):
+    """A customer or supplier that was deleted, kept so an admin can review,
+    restore, or permanently purge it. Deleting a record with transactions
+    always merges them into another record first, so the transactions
+    themselves are never lost -- this keeps the deleted record's own
+    details plus which transactions were moved where, which is everything
+    needed to undo the delete (see crud.restore_deleted_record)."""
+
+    __tablename__ = "deleted_records"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20), index=True)  # "customer" / "supplier"
+    original_id: Mapped[int]
+    code: Mapped[str] = mapped_column(String(255))
+    name: Mapped[str] = mapped_column(String(255))
+    original_created_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Totals at the moment of deletion, for reference.
+    transaction_count: Mapped[int] = mapped_column(default=0)
+    balance: Mapped[Decimal] = mapped_column(Numeric(16, 2), default=0)
+    # Where the transactions went, if it was merged into another record.
+    moved_to_id: Mapped[int | None] = mapped_column(nullable=True)
+    moved_to_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    moved_transaction_ids: Mapped[list[int]] = mapped_column(JSON, default=list)
+    deleted_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    deleted_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
     )

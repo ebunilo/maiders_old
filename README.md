@@ -129,8 +129,16 @@ The same rules apply to both sides:
   (`admin`, plus `customer-user` for customers and `supplier-user` for
   suppliers). A record with transactions must first have them moved to the
   one being kept (similar names are suggested), so no ledger entries are
-  lost; one with no transactions is simply deleted. This can't be undone,
-  so take a backup first if merging many.
+  lost; one with no transactions is simply deleted.
+- **Deleted Records** (`admin` only, in the nav): every deleted customer or
+  supplier is archived in the `deleted_records` table first — its details,
+  balance at deletion, who deleted it, and which transactions were moved
+  to which record. "Restore" recreates it under its original id (old links
+  work again) and moves its transactions back, following any later merges
+  of the record they went to; it's refused if the code has since been
+  reused. "Delete permanently" prunes the archive entry; its transactions
+  stay with the record they were merged into. The table is created
+  automatically on startup, so no migration step is needed.
 
 `customer-user` and `supplier-user` are also restricted to signing in
 **Monday-Saturday, 8:00 AM-6:30 PM WAT** — no access at all on Sundays
