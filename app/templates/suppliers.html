@@ -16,7 +16,7 @@
     hx-push-url="true"
   />
 </div>
-<div id="results">
+<div id="results" hx-get="/suppliers" hx-trigger="supplierCreated from:body" hx-target="#results" hx-swap="innerHTML">
   {% include "partials/suppliers_table.html" %}
 </div>
 {% endblock %}

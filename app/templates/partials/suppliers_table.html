@@ -7,11 +7,12 @@
       <th class="text-end">Total Cr</th>
       <th class="text-end">Balance (We Owe)</th>
       <th class="text-end"># Txns</th>
+      <th></th>
     </tr>
   </thead>
   <tbody>
   {% for s in suppliers %}
-    <tr class="cursor-pointer" onclick="window.location='/suppliers/{{ s.id }}'" style="cursor:pointer">
+    <tr class="cursor-pointer" onclick="if (!event.target.closest('button')) window.location='/suppliers/{{ s.id }}'" style="cursor:pointer">
       <td>{{ s.code }}</td>
       <td>{{ s.name }}</td>
       <td class="text-end amount-dr">₦{{ s.total_dr | money }}</td>
@@ -20,9 +21,19 @@
         ₦{{ s.balance | money }}
       </td>
       <td class="text-end">{{ s.transaction_count }}</td>
+      <td class="text-end">
+        <button
+          class="btn btn-sm btn-outline-danger py-0"
+          title="Delete (merge a duplicate into another supplier)"
+          data-bs-toggle="modal"
+          data-bs-target="#formModal"
+          hx-get="/suppliers/{{ s.id }}/delete"
+          hx-target="#formModalContent"
+        >Delete</button>
+      </td>
     </tr>
   {% else %}
-    <tr><td colspan="6" class="text-center text-muted py-4">No suppliers found.</td></tr>
+    <tr><td colspan="7" class="text-center text-muted py-4">No suppliers found.</td></tr>
   {% endfor %}
   </tbody>
 </table>

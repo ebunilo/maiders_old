@@ -130,6 +130,18 @@ def create_customer_from_form(
             "partials/customer_form.html",
             {"error": "A customer with that code already exists.", "code": code, "name": name},
         )
+    existing = crud.find_customer_by_same_name(db, name)
+    if existing:
+        return templates.TemplateResponse(
+            request,
+            "partials/customer_form.html",
+            {
+                "error": f'A customer named "{existing.name}" already exists '
+                f"(code {existing.code}).",
+                "code": code,
+                "name": name,
+            },
+        )
     crud.create_customer(db, schemas.CustomerCreate(code=code, name=name))
 
     response = templates.TemplateResponse(
@@ -140,6 +152,99 @@ def create_customer_from_form(
     # Lets any results table on the current page (e.g. the customers list)
     # refresh itself without this modal needing to know if one is present.
     response.headers["HX-Trigger"] = "customerCreated"
+    return response
+
+
+@router.get("/customers/lookup", response_class=HTMLResponse)
+def customer_lookup(
+    request: Request, q: str = "", exclude: int | None = None, db: Session = Depends(get_db)
+):
+    """Suggestions for the "move transactions to" picker in the delete
+    customer dialog."""
+    query = q.strip()
+    matches = crud.find_customers_by_name(db, query) if query else []
+    return templates.TemplateResponse(
+        request,
+        "partials/customer_suggestions.html",
+        {
+            "matches": [c for c in matches if c.id != exclude],
+            "query": query,
+            "select_fn": "selectMergeTarget",
+            "empty_message": "No matching customer.",
+        },
+    )
+
+
+def _delete_party_form(
+    request: Request,
+    party,
+    party_label: str,
+    base_path: str,
+    balance: dict,
+    similar: list,
+    error: str | None = None,
+    move_to=None,
+):
+    """The delete / merge-duplicate dialog, shared by customers and
+    suppliers."""
+    return templates.TemplateResponse(
+        request,
+        "partials/party_delete_form.html",
+        {
+            "party": party,
+            "party_label": party_label,
+            "base_path": base_path,
+            "balance": balance,
+            "similar": similar,
+            "move_to": move_to,
+            "error": error,
+        },
+    )
+
+
+def _delete_customer_form(
+    request: Request, db: Session, customer, error: str | None = None, move_to=None
+):
+    return _delete_party_form(
+        request,
+        customer,
+        "Customer",
+        "/customers",
+        crud.get_customer_balance(db, customer.id),
+        crud.find_similar_customers(db, customer),
+        error,
+        move_to,
+    )
+
+
+@router.get("/customers/{customer_id}/delete", response_class=HTMLResponse)
+def delete_customer_form(customer_id: int, request: Request, db: Session = Depends(get_db)):
+    customer = crud.get_customer(db, customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return _delete_customer_form(request, db, customer)
+
+
+@router.post("/customers/{customer_id}/delete", response_class=HTMLResponse)
+def delete_customer_from_form(
+    customer_id: int,
+    request: Request,
+    move_to_id: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    customer = crud.get_customer(db, customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    # Blank ("") when nothing was picked -- see customer_id in
+    # create_transaction_from_form.
+    move_to = crud.get_customer(db, int(move_to_id)) if move_to_id else None
+    try:
+        crud.delete_customer(db, customer, move_to=move_to)
+    except ValueError as exc:
+        return _delete_customer_form(request, db, customer, error=str(exc), move_to=move_to)
+    # Land on the kept customer's statement so the merged result is visible.
+    response = HTMLResponse("")
+    response.headers["HX-Redirect"] = f"/customers/{move_to.id}" if move_to else "/customers"
     return response
 
 
@@ -285,7 +390,12 @@ def transaction_customer_lookup(
     return templates.TemplateResponse(
         request,
         "partials/customer_suggestions.html",
-        {"matches": matches, "query": query},
+        {
+            "matches": matches,
+            "query": query,
+            "select_fn": "selectTxnCustomer",
+            "empty_message": "No matching customer. Add them with + New Customer first.",
+        },
     )
 
 
@@ -293,7 +403,6 @@ def transaction_customer_lookup(
 def create_transaction_from_form(
     request: Request,
     customer_id: str | None = Form(None),
-    customer_name: str = Form(...),
     date_posted: datetime.date = Form(...),
     details: str | None = Form(None),
     amount_dr: float = Form(0),
@@ -302,12 +411,15 @@ def create_transaction_from_form(
     bank_name: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
+    # A customer must be picked from the suggestions (which fills the hidden
+    # customer_id); a typed name alone is never used to find or create one,
+    # so a typo can't post to -- or spawn -- the wrong customer. The form
+    # keeps Save disabled until then; this is the server-side backstop.
+    # (Taken as str: the field is blank "" until picked, which int would 422 on.)
+    if not customer_id or not customer_id.isdigit() or not crud.get_customer(db, int(customer_id)):
+        raise HTTPException(status_code=400, detail="Select an existing customer")
     data = schemas.TransactionCreate(
-        # The hidden customer_id field is blank ("") whenever the user
-        # types a brand-new customer name instead of picking a suggestion --
-        # int | None = Form(None) would 422 on that empty string.
-        customer_id=int(customer_id) if customer_id else None,
-        customer_name=customer_name,
+        customer_id=int(customer_id),
         date_posted=date_posted,
         details=details,
         amount_dr=amount_dr,
@@ -359,6 +471,110 @@ def suppliers_page(
     if request.headers.get("HX-Request"):
         return templates.TemplateResponse(request, "partials/suppliers_table.html", ctx)
     return templates.TemplateResponse(request, "suppliers.html", ctx)
+
+
+@router.get("/suppliers/new", response_class=HTMLResponse)
+def new_supplier_form(request: Request):
+    return templates.TemplateResponse(
+        request, "partials/supplier_form.html", {"error": None, "code": "", "name": ""}
+    )
+
+
+@router.post("/suppliers/new", response_class=HTMLResponse)
+def create_supplier_from_form(
+    request: Request,
+    name: str = Form(...),
+    code: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    name = name.strip()
+    code = (code or "").strip()
+
+    def form_error(message: str):
+        return templates.TemplateResponse(
+            request,
+            "partials/supplier_form.html",
+            {"error": message, "code": code, "name": name},
+        )
+
+    if code and crud.get_supplier_by_code(db, code):
+        return form_error("A supplier with that code already exists.")
+    existing = crud.find_supplier_by_same_name(db, name)
+    if existing:
+        return form_error(f'A supplier named "{existing.name}" already exists (code {existing.code}).')
+    code = code or crud.generate_supplier_code(db, name)
+    crud.create_supplier(db, schemas.SupplierCreate(code=code, name=name))
+
+    response = templates.TemplateResponse(
+        request, "partials/supplier_form_success.html", {"code": code, "name": name}
+    )
+    # Refreshes the suppliers list if it's the page underneath the modal.
+    response.headers["HX-Trigger"] = "supplierCreated"
+    return response
+
+
+@router.get("/suppliers/lookup", response_class=HTMLResponse)
+def supplier_lookup(
+    request: Request, q: str = "", exclude: int | None = None, db: Session = Depends(get_db)
+):
+    """Suggestions for the "move transactions to" picker in the delete
+    supplier dialog."""
+    query = q.strip()
+    matches = crud.find_suppliers_by_name(db, query) if query else []
+    return templates.TemplateResponse(
+        request,
+        "partials/supplier_suggestions.html",
+        {
+            "matches": [s for s in matches if s.id != exclude],
+            "query": query,
+            "select_fn": "selectMergeTarget",
+            "empty_message": "No matching supplier.",
+        },
+    )
+
+
+def _delete_supplier_form(
+    request: Request, db: Session, supplier, error: str | None = None, move_to=None
+):
+    return _delete_party_form(
+        request,
+        supplier,
+        "Supplier",
+        "/suppliers",
+        crud.get_supplier_balance(db, supplier.id),
+        crud.find_similar_suppliers(db, supplier),
+        error,
+        move_to,
+    )
+
+
+@router.get("/suppliers/{supplier_id}/delete", response_class=HTMLResponse)
+def delete_supplier_form(supplier_id: int, request: Request, db: Session = Depends(get_db)):
+    supplier = crud.get_supplier(db, supplier_id)
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    return _delete_supplier_form(request, db, supplier)
+
+
+@router.post("/suppliers/{supplier_id}/delete", response_class=HTMLResponse)
+def delete_supplier_from_form(
+    supplier_id: int,
+    request: Request,
+    move_to_id: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    supplier = crud.get_supplier(db, supplier_id)
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    # Blank ("") when nothing was picked.
+    move_to = crud.get_supplier(db, int(move_to_id)) if move_to_id else None
+    try:
+        crud.delete_supplier(db, supplier, move_to=move_to)
+    except ValueError as exc:
+        return _delete_supplier_form(request, db, supplier, error=str(exc), move_to=move_to)
+    response = HTMLResponse("")
+    response.headers["HX-Redirect"] = f"/suppliers/{move_to.id}" if move_to else "/suppliers"
+    return response
 
 
 @router.get("/suppliers/{supplier_id}", response_class=HTMLResponse)
@@ -502,7 +718,12 @@ def supplier_transaction_supplier_lookup(
     return templates.TemplateResponse(
         request,
         "partials/supplier_suggestions.html",
-        {"matches": matches, "query": query},
+        {
+            "matches": matches,
+            "query": query,
+            "select_fn": "selectTxnSupplier",
+            "empty_message": "No matching supplier. Add them with + New Supplier first.",
+        },
     )
 
 
@@ -510,7 +731,6 @@ def supplier_transaction_supplier_lookup(
 def create_supplier_transaction_from_form(
     request: Request,
     supplier_id: str | None = Form(None),
-    supplier_name: str = Form(...),
     date_posted: datetime.date = Form(...),
     details: str | None = Form(None),
     amount_cr: float = Form(0),
@@ -528,11 +748,12 @@ def create_supplier_transaction_from_form(
     # float-parses to a 422 if passed through as-is.
     quantity_val = float(quantity) if quantity else None
     unit_cost_val = float(unit_cost) if unit_cost else None
+    # A supplier must be picked from the suggestions -- a typed name is never
+    # used to find or create one. See create_transaction_from_form.
+    if not supplier_id or not supplier_id.isdigit() or not crud.get_supplier(db, int(supplier_id)):
+        raise HTTPException(status_code=400, detail="Select an existing supplier")
     data = schemas.SupplierTransactionCreate(
-        # Blank ("") whenever the user types a brand-new supplier name
-        # instead of picking a suggestion -- see customer_id above.
-        supplier_id=int(supplier_id) if supplier_id else None,
-        supplier_name=supplier_name,
+        supplier_id=int(supplier_id),
         date_posted=date_posted,
         details=details,
         # Debit (goods received) is derived from quantity x unit cost rather

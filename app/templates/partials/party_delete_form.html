@@ -1,0 +1,94 @@
+<div class="modal-header">
+  <h5 class="modal-title">Delete {{ party_label }}</h5>
+  <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+<form hx-post="{{ base_path }}/{{ party.id }}/delete" hx-target="#formModalContent" hx-swap="innerHTML">
+  <div class="modal-body">
+    {% if error %}
+    <div class="alert alert-danger py-2 small">{{ error }}</div>
+    {% endif %}
+    <div class="mb-3">
+      <div class="fw-bold">{{ party.name }}</div>
+      <div class="text-muted small">
+        Code: {{ party.code }} &middot; {{ balance.transaction_count }} transaction{{ '' if balance.transaction_count == 1 else 's' }}
+        &middot; Balance ₦{{ balance.balance | money }}
+      </div>
+    </div>
+
+    {% if balance.transaction_count %}
+    <p class="small mb-2">
+      To delete a duplicate, pick the {{ party_label | lower }} to <strong>keep</strong>. All of this {{ party_label | lower }}'s
+      transactions will be moved to them first, so nothing is lost from the ledger.
+    </p>
+
+    {% if similar %}
+    <div class="small text-muted mb-1">Similar names:</div>
+    <div class="d-flex flex-wrap gap-1 mb-2">
+      {% for c in similar %}
+      <button type="button" class="btn btn-sm btn-outline-secondary"
+              data-id="{{ c.id }}" data-name="{{ c.name }}"
+              onclick="selectMergeTarget(this.dataset.id, this.dataset.name)">
+        {{ c.name }} <span class="text-muted">({{ c.code }})</span>
+      </button>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <label class="form-label small mb-0" for="merge-target-name">Move transactions to</label>
+    <div class="position-relative">
+      <div class="input-group input-group-sm">
+        <input class="form-control" id="merge-target-name" autocomplete="off"
+               placeholder="Search for the {{ party_label | lower }} to keep..."
+               value="{{ move_to.name if move_to else '' }}"
+               {% if move_to %}readonly{% endif %}
+               name="q"
+               hx-get="{{ base_path }}/lookup?exclude={{ party.id }}"
+               hx-trigger="input changed delay:250ms"
+               hx-target="#merge-target-suggestions"
+               hx-swap="innerHTML"
+               onblur="setTimeout(() => document.getElementById('merge-target-suggestions').innerHTML='', 200)">
+        <button class="btn btn-outline-secondary {% if not move_to %}d-none{% endif %}" type="button"
+                id="merge-target-change" onclick="clearMergeTarget()">Change</button>
+      </div>
+      <input type="hidden" id="merge-target-id" name="move_to_id" value="{{ move_to.id if move_to else '' }}">
+      <div id="merge-target-suggestions" class="position-absolute w-100" style="z-index: 1056;"></div>
+    </div>
+    {% else %}
+    <p class="small mb-0">This {{ party_label | lower }} has no transactions and can be deleted safely.</p>
+    {% endif %}
+  </div>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+    {% if balance.transaction_count %}
+    <button type="submit" class="btn btn-danger btn-sm" id="merge-submit" {% if not move_to %}disabled{% endif %}>
+      Move {{ balance.transaction_count }} transaction{{ '' if balance.transaction_count == 1 else 's' }} &amp; delete
+    </button>
+    {% else %}
+    <button type="submit" class="btn btn-danger btn-sm">Delete {{ party_label | lower }}</button>
+    {% endif %}
+  </div>
+</form>
+<script>
+  function setMergeTargetLocked(locked) {
+    const input = document.getElementById('merge-target-name');
+    input.readOnly = locked;
+    input.classList.toggle('bg-light', locked);
+    document.getElementById('merge-target-change').classList.toggle('d-none', !locked);
+    document.getElementById('merge-submit').disabled = !locked;
+  }
+
+  function selectMergeTarget(id, name) {
+    document.getElementById('merge-target-name').value = name;
+    document.getElementById('merge-target-id').value = id;
+    document.getElementById('merge-target-suggestions').innerHTML = '';
+    setMergeTargetLocked(true);
+  }
+
+  function clearMergeTarget() {
+    const input = document.getElementById('merge-target-name');
+    input.value = '';
+    document.getElementById('merge-target-id').value = '';
+    setMergeTargetLocked(false);
+    input.focus();
+  }
+</script>
