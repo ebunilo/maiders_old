@@ -66,20 +66,52 @@ def _find_similar(db: Session, party_model, party, limit: int = 5) -> list:
     return [p for name in matches for p in by_name[name]][:limit]
 
 
-def _delete_party(db: Session, party_model, txn_model, fk_column, party, move_to=None) -> int:
+def _delete_party(
+    db: Session,
+    party_model,
+    txn_model,
+    fk_column,
+    party,
+    move_to=None,
+    deleted_by: str | None = None,
+) -> int:
     """Delete a customer/supplier. If they have transactions, `move_to` is
     required and every transaction is reassigned to that party first
     (merging a duplicate into the original), so no ledger entries are lost.
-    Returns the number of transactions moved."""
+    The deleted record is archived in deleted_records (with which
+    transactions moved where) so an admin can restore it. Returns the
+    number of transactions moved."""
     label = party_model.__name__.lower()  # "customer" / "supplier"
-    count = db.scalar(select(func.count(txn_model.id)).where(fk_column == party.id))
-    if count and move_to is None:
+    txn_ids, total_dr, total_cr = db.execute(
+        select(
+            func.array_agg(txn_model.id),
+            func.coalesce(func.sum(txn_model.amount_dr), 0),
+            func.coalesce(func.sum(txn_model.amount_cr), 0),
+        ).where(fk_column == party.id)
+    ).one()
+    txn_ids = sorted(txn_ids or [])
+    if txn_ids and move_to is None:
         raise ValueError(f"This {label} has transactions; choose a {label} to move them to")
     if move_to is not None and move_to.id == party.id:
         raise ValueError(f"Cannot move transactions to the {label} being deleted")
 
+    db.add(
+        models.DeletedRecord(
+            kind=label,
+            original_id=party.id,
+            code=party.code,
+            name=party.name,
+            original_created_at=party.created_at,
+            transaction_count=len(txn_ids),
+            balance=total_dr - total_cr,
+            moved_to_id=move_to.id if txn_ids else None,
+            moved_to_name=move_to.name if txn_ids else None,
+            moved_transaction_ids=txn_ids,
+            deleted_by=deleted_by,
+        )
+    )
     moved = 0
-    if count:
+    if txn_ids:
         moved = db.execute(
             update(txn_model).where(fk_column == party.id).values({fk_column.key: move_to.id})
         ).rowcount
@@ -128,10 +160,19 @@ def resolve_transaction_customer(db: Session, data: schemas.TransactionCreate) -
 
 
 def delete_customer(
-    db: Session, customer: models.Customer, move_to: models.Customer | None = None
+    db: Session,
+    customer: models.Customer,
+    move_to: models.Customer | None = None,
+    deleted_by: str | None = None,
 ) -> int:
     return _delete_party(
-        db, models.Customer, models.Transaction, models.Transaction.customer_id, customer, move_to
+        db,
+        models.Customer,
+        models.Transaction,
+        models.Transaction.customer_id,
+        customer,
+        move_to,
+        deleted_by,
     )
 
 
@@ -469,7 +510,10 @@ def resolve_supplier_transaction_supplier(
 
 
 def delete_supplier(
-    db: Session, supplier: models.Supplier, move_to: models.Supplier | None = None
+    db: Session,
+    supplier: models.Supplier,
+    move_to: models.Supplier | None = None,
+    deleted_by: str | None = None,
 ) -> int:
     return _delete_party(
         db,
@@ -478,6 +522,7 @@ def delete_supplier(
         models.SupplierTransaction.supplier_id,
         supplier,
         move_to,
+        deleted_by,
     )
 
 
@@ -903,3 +948,93 @@ def creditors_report(
             "cr", as_of, ageing, sort,
         ),
     ]
+
+
+# --- Deleted records (admin recycle bin) -----------------------------------
+
+_DELETED_KINDS = {
+    "customer": (models.Customer, models.Transaction, models.Transaction.customer_id),
+    "supplier": (
+        models.Supplier,
+        models.SupplierTransaction,
+        models.SupplierTransaction.supplier_id,
+    ),
+}
+
+
+def list_deleted_records(db: Session, kind: str | None = None) -> list[models.DeletedRecord]:
+    stmt = select(models.DeletedRecord).order_by(
+        models.DeletedRecord.deleted_at.desc(), models.DeletedRecord.id.desc()
+    )
+    if kind:
+        stmt = stmt.where(models.DeletedRecord.kind == kind)
+    return list(db.scalars(stmt).all())
+
+
+def get_deleted_record(db: Session, record_id: int) -> models.DeletedRecord | None:
+    return db.get(models.DeletedRecord, record_id)
+
+
+def restore_deleted_record(db: Session, record: models.DeletedRecord) -> tuple[object, int]:
+    """Undo a delete: recreate the customer/supplier under its original id
+    (so old links work again) and move its transactions back to it.
+    Returns (restored record, transactions moved back). Raises ValueError
+    if the original id or code is taken again."""
+    party_model, txn_model, fk_column = _DELETED_KINDS[record.kind]
+    if db.get(party_model, record.original_id):
+        raise ValueError(f"A {record.kind} with id {record.original_id} already exists")
+    if db.scalar(select(party_model.id).where(party_model.code == record.code)):
+        raise ValueError(
+            f'The code "{record.code}" is now used by another {record.kind}; '
+            "rename that one first"
+        )
+
+    # Where the transactions could be now: the record they were merged into,
+    # or -- if that was itself deleted and merged on since -- wherever that
+    # chain of merges leads. Only transactions still sitting somewhere on
+    # that chain are reclaimed, so restoring in any order works: e.g. after
+    # A->B then B->C, restoring A and then B must not hand A's transactions
+    # (which B's archive also lists) to B.
+    holders: list[int] = []
+    current = record.moved_to_id
+    while current is not None and current not in holders:
+        holders.append(current)
+        if db.get(party_model, current):
+            break
+        next_hop = db.scalar(
+            select(models.DeletedRecord)
+            .where(
+                models.DeletedRecord.kind == record.kind,
+                models.DeletedRecord.original_id == current,
+            )
+            .order_by(models.DeletedRecord.deleted_at.desc())
+            .limit(1)
+        )
+        current = next_hop.moved_to_id if next_hop else None
+
+    party = party_model(id=record.original_id, code=record.code, name=record.name)
+    if record.original_created_at:
+        party.created_at = record.original_created_at
+    db.add(party)
+    db.flush()
+    moved = 0
+    if record.moved_transaction_ids and holders:
+        moved = db.execute(
+            update(txn_model)
+            .where(
+                txn_model.id.in_(record.moved_transaction_ids),
+                fk_column.in_(holders),
+            )
+            .values({fk_column.key: party.id})
+        ).rowcount
+    db.delete(record)
+    db.commit()
+    return party, moved
+
+
+def purge_deleted_record(db: Session, record: models.DeletedRecord) -> None:
+    """Permanently remove a deleted record from the archive (it can no longer
+    be restored). Its transactions are unaffected -- they stay with the
+    record they were merged into."""
+    db.delete(record)
+    db.commit()

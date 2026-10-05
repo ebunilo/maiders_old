@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Deleted Records - Ledger{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-3">
+  <div>
+    <h3 class="mb-0">Deleted Records</h3>
+    <div class="text-muted small">
+      Customers and suppliers that were deleted. Restore one to undo the delete (its transactions are
+      moved back to it), or delete it permanently once it's no longer needed.
+    </div>
+  </div>
+  <select class="form-select form-select-sm" style="max-width: 200px" name="kind"
+          hx-get="/deleted-records" hx-target="#results" hx-push-url="true">
+    <option value="" {% if not kind %}selected{% endif %}>All</option>
+    <option value="customer" {% if kind == 'customer' %}selected{% endif %}>Customers</option>
+    <option value="supplier" {% if kind == 'supplier' %}selected{% endif %}>Suppliers</option>
+  </select>
+</div>
+<div id="results">
+  {% include "partials/deleted_records_table.html" %}
+</div>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% if flash %}
+<div class="alert alert-success alert-dismissible fade show" role="alert">
+  {{ flash }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if error %}
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+  {{ error }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+<table class="table table-sm bg-white">
+  <thead>
+    <tr>
+      <th>Deleted</th>
+      <th>Type</th>
+      <th>Code</th>
+      <th>Name</th>
+      <th>Transactions</th>
+      <th class="text-end">Balance at deletion</th>
+      <th>Deleted by</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for r in records %}
+    <tr>
+      <td class="text-nowrap">{{ (r.deleted_at | wat).strftime('%d %b %Y, %H:%M') }} WAT</td>
+      <td>{{ r.kind | capitalize }}</td>
+      <td>{{ r.code }}</td>
+      <td>{{ r.name }}</td>
+      <td class="small">
+        {% if r.transaction_count %}
+          {{ r.transaction_count }} moved to
+          <a href="/{{ r.kind }}s/{{ r.moved_to_id }}">{{ r.moved_to_name }}</a>
+        {% else %}
+          <span class="text-muted">None</span>
+        {% endif %}
+      </td>
+      <td class="text-end">₦{{ r.balance | money }}</td>
+      <td>{{ r.deleted_by or '' }}</td>
+      <td class="text-end text-nowrap">
+        <button
+          class="btn btn-sm btn-outline-primary py-0"
+          hx-post="/deleted-records/{{ r.id }}/restore?kind={{ kind }}"
+          hx-target="#results"
+          hx-confirm="Restore {{ r.kind }} {{ r.name }}?{% if r.transaction_count %} Its {{ r.transaction_count }} transaction(s) will be moved back from {{ r.moved_to_name }}.{% endif %}"
+        >Restore</button>
+        <button
+          class="btn btn-sm btn-outline-danger py-0"
+          hx-post="/deleted-records/{{ r.id }}/purge?kind={{ kind }}"
+          hx-target="#results"
+          hx-confirm="Permanently delete {{ r.name }}? It can no longer be restored.{% if r.transaction_count %} (Its transactions stay with {{ r.moved_to_name }}.){% endif %}"
+        >Delete permanently</button>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="8" class="text-center text-muted py-4">No deleted records.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>

@@ -56,6 +56,9 @@
     {% else %}
     <p class="small mb-0">This {{ party_label | lower }} has no transactions and can be deleted safely.</p>
     {% endif %}
+    <p class="small text-muted mt-3 mb-0">
+      A copy is kept under Deleted Records, where an admin can restore it if this was a mistake.
+    </p>
   </div>
   <div class="modal-footer">
     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>

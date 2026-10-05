@@ -37,6 +37,15 @@ def relative_url(url) -> str:
 templates.env.filters["relurl"] = relative_url
 
 
+def to_wat(value: datetime.datetime) -> datetime.datetime:
+    """Show stored timestamps in West Africa Time regardless of the
+    database server's timezone (see authz.WAT)."""
+    return value.astimezone(authz.WAT) if value.tzinfo else value
+
+
+templates.env.filters["wat"] = to_wat
+
+
 def _pagination(total: int, page: int, page_size: int) -> dict:
     pages = max(1, math.ceil(total / page_size)) if page_size else 1
     window_start = max(1, page - 2)
@@ -239,7 +248,9 @@ def delete_customer_from_form(
     # create_transaction_from_form.
     move_to = crud.get_customer(db, int(move_to_id)) if move_to_id else None
     try:
-        crud.delete_customer(db, customer, move_to=move_to)
+        crud.delete_customer(
+            db, customer, move_to=move_to, deleted_by=request.session.get("username")
+        )
     except ValueError as exc:
         return _delete_customer_form(request, db, customer, error=str(exc), move_to=move_to)
     # Land on the kept customer's statement so the merged result is visible.
@@ -569,7 +580,9 @@ def delete_supplier_from_form(
     # Blank ("") when nothing was picked.
     move_to = crud.get_supplier(db, int(move_to_id)) if move_to_id else None
     try:
-        crud.delete_supplier(db, supplier, move_to=move_to)
+        crud.delete_supplier(
+            db, supplier, move_to=move_to, deleted_by=request.session.get("username")
+        )
     except ValueError as exc:
         return _delete_supplier_form(request, db, supplier, error=str(exc), move_to=move_to)
     response = HTMLResponse("")
@@ -875,3 +888,59 @@ def creditors_report(
     sort = _parse_sort(sort)
     sections = crud.creditors_report(db, as_of=as_of_date, ageing=ageing, sort=sort)
     return _balance_report(request, "creditors", as_of_date, ageing, sort, sections)
+
+
+# --- Deleted records (admin only) ---------------------------------------
+# /deleted-records isn't in any restricted role's prefixes (app/authz.py),
+# so only admins can reach it.
+
+
+def _deleted_records_response(
+    request: Request, db: Session, kind: str | None, flash: str | None = None, error: str | None = None
+):
+    kind = kind if kind in ("customer", "supplier") else None
+    ctx = {
+        "records": crud.list_deleted_records(db, kind=kind),
+        "kind": kind or "",
+        "flash": flash,
+        "error": error,
+        "active": "deleted_records",
+    }
+    if request.headers.get("HX-Request"):
+        return templates.TemplateResponse(request, "partials/deleted_records_table.html", ctx)
+    return templates.TemplateResponse(request, "deleted_records.html", ctx)
+
+
+@router.get("/deleted-records", response_class=HTMLResponse)
+def deleted_records_page(request: Request, kind: str | None = None, db: Session = Depends(get_db)):
+    return _deleted_records_response(request, db, kind)
+
+
+@router.post("/deleted-records/{record_id}/restore", response_class=HTMLResponse)
+def restore_deleted_record(
+    record_id: int, request: Request, kind: str | None = None, db: Session = Depends(get_db)
+):
+    record = crud.get_deleted_record(db, record_id)
+    if not record:
+        return _deleted_records_response(request, db, kind, error="That record no longer exists.")
+    label, name = record.kind.capitalize(), record.name
+    try:
+        party, moved = crud.restore_deleted_record(db, record)
+    except ValueError as exc:
+        return _deleted_records_response(request, db, kind, error=f"Could not restore {name}: {exc}.")
+    flash = f"{label} {name} restored"
+    if moved:
+        flash += f" with {moved} transaction{'' if moved == 1 else 's'} moved back"
+    return _deleted_records_response(request, db, kind, flash=flash + ".")
+
+
+@router.post("/deleted-records/{record_id}/purge", response_class=HTMLResponse)
+def purge_deleted_record(
+    record_id: int, request: Request, kind: str | None = None, db: Session = Depends(get_db)
+):
+    record = crud.get_deleted_record(db, record_id)
+    if record:
+        name = record.name
+        crud.purge_deleted_record(db, record)
+        return _deleted_records_response(request, db, kind, flash=f"{name} permanently deleted.")
+    return _deleted_records_response(request, db, kind)
