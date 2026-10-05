@@ -590,8 +590,18 @@ def _parse_as_of(as_of: str | None) -> datetime.date | None:
         raise HTTPException(status_code=400, detail="Invalid as_of date")
 
 
+def _parse_sort(sort: str | None) -> str:
+    # Unknown or missing values fall back to the default (alphabetical).
+    return sort if sort in crud.REPORT_SORTS else next(iter(crud.REPORT_SORTS))
+
+
 def _balance_report(
-    request: Request, kind: str, as_of: datetime.date | None, ageing: bool, sections: list[dict]
+    request: Request,
+    kind: str,
+    as_of: datetime.date | None,
+    ageing: bool,
+    sort: str,
+    sections: list[dict],
 ):
     role = request.session.get("role", authz.ADMIN)
     for section in sections:
@@ -608,6 +618,8 @@ def _balance_report(
             "grand_total": sum((s["total"] for s in sections), 0),
             "ageing": ageing,
             "age_buckets": crud.AGE_BUCKETS,
+            "sort": sort,
+            "sorts": crud.REPORT_SORTS,
             "as_of": as_of,
             "generated_at": datetime.datetime.now(),
             "company_name": COMPANY_NAME,
@@ -621,11 +633,13 @@ def debtors_report(
     request: Request,
     as_of: str | None = None,
     ageing: bool = False,
+    sort: str | None = None,
     db: Session = Depends(get_db),
 ):
     as_of_date = _parse_as_of(as_of)
-    sections = crud.debtors_report(db, as_of=as_of_date, ageing=ageing)
-    return _balance_report(request, "debtors", as_of_date, ageing, sections)
+    sort = _parse_sort(sort)
+    sections = crud.debtors_report(db, as_of=as_of_date, ageing=ageing, sort=sort)
+    return _balance_report(request, "debtors", as_of_date, ageing, sort, sections)
 
 
 @router.get("/reports/creditors", response_class=HTMLResponse)
@@ -633,8 +647,10 @@ def creditors_report(
     request: Request,
     as_of: str | None = None,
     ageing: bool = False,
+    sort: str | None = None,
     db: Session = Depends(get_db),
 ):
     as_of_date = _parse_as_of(as_of)
-    sections = crud.creditors_report(db, as_of=as_of_date, ageing=ageing)
-    return _balance_report(request, "creditors", as_of_date, ageing, sections)
+    sort = _parse_sort(sort)
+    sections = crud.creditors_report(db, as_of=as_of_date, ageing=ageing, sort=sort)
+    return _balance_report(request, "creditors", as_of_date, ageing, sort, sections)
