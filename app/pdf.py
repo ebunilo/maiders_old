@@ -146,15 +146,13 @@ def build_customer_ledger_pdf(
     story = []
 
     summary_data = [
-        ["Total Debit (NGN)", "Total Credit (NGN)", "Balance (NGN)", "Transactions"],
+        ["Balance (NGN)", "Transactions"],
         [
-            _money(balance["total_dr"]),
-            _money(balance["total_cr"]),
             _money(balance["balance"]),
             str(balance["transaction_count"]),
         ],
     ]
-    summary_table = Table(summary_data, colWidths=[66 * mm] * 4)
+    summary_table = Table(summary_data, colWidths=[132 * mm] * 2)
     summary_table.setStyle(
         TableStyle(
             [
