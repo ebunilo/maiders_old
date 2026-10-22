@@ -178,6 +178,7 @@ def build_customer_ledger_pdf(
         "Type",
         "Ref / Invoice",
         "Payment",
+        "Bank",
         "Debit (NGN)",
         "Credit (NGN)",
         "Balance (NGN)",
@@ -191,6 +192,7 @@ def build_customer_ledger_pdf(
                 txn.form_id or "-",
                 Paragraph(escape(txn.invoice_no or txn.ref_no or "-"), cell_style),
                 txn.payment_mode or "-",
+                Paragraph(escape(txn.bank_name or "-"), cell_style),
                 _money(txn.amount_dr) if txn.amount_dr else "",
                 _money(txn.amount_cr) if txn.amount_cr else "",
                 _money(running),
@@ -198,9 +200,9 @@ def build_customer_ledger_pdf(
         )
 
     if len(data) == 1:
-        data.append(["-", "No transactions in this period.", "", "", "", "", "", ""])
+        data.append(["-", "No transactions in this period.", "", "", "", "", "", "", ""])
 
-    col_widths = [22 * mm, 68 * mm, 14 * mm, 46 * mm, 22 * mm, 28 * mm, 28 * mm, 28 * mm]
+    col_widths = [22 * mm, 56 * mm, 14 * mm, 34 * mm, 20 * mm, 30 * mm, 26 * mm, 26 * mm, 28 * mm]
     table = Table(data, colWidths=col_widths, repeatRows=1)
     table.setStyle(
         TableStyle(
@@ -213,7 +215,7 @@ def build_customer_ledger_pdf(
                 ("ALIGN", (0, 0), (0, -1), "CENTER"),
                 ("ALIGN", (2, 0), (2, -1), "CENTER"),
                 ("ALIGN", (4, 0), (4, -1), "CENTER"),
-                ("ALIGN", (5, 0), (7, -1), "RIGHT"),
+                ("ALIGN", (6, 0), (8, -1), "RIGHT"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#adb5bd")),
                 ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f4f6f9")]),
@@ -307,7 +309,8 @@ def build_supplier_ledger_pdf(
         "Details",
         "Type",
         "Item",
-        "Payment / Account",
+        "Payment",
+        "Bank",
         "Debit (NGN)",
         "Credit (NGN)",
         "Balance (NGN)",
@@ -321,16 +324,14 @@ def build_supplier_ledger_pdf(
             item_cell = f"{txn.item_name} ({qty_bits})" if qty_bits else txn.item_name
         else:
             item_cell = txn.vehicle_no or "-"
-        payment_cell = " / ".join(
-            b for b in [txn.payment_mode, txn.account_used] if b
-        ) or "-"
         data.append(
             [
                 txn.date_posted.strftime("%d-%b-%Y"),
                 Paragraph(escape(txn.details or "-"), cell_style),
                 txn.form_id or "-",
                 Paragraph(escape(item_cell), cell_style),
-                payment_cell,
+                txn.payment_mode or "-",
+                Paragraph(escape(txn.account_used or "-"), cell_style),
                 _money(txn.amount_dr) if txn.amount_dr else "",
                 _money(txn.amount_cr) if txn.amount_cr else "",
                 _money(running),
@@ -338,9 +339,9 @@ def build_supplier_ledger_pdf(
         )
 
     if len(data) == 1:
-        data.append(["-", "No transactions in this period.", "", "", "", "", "", ""])
+        data.append(["-", "No transactions in this period.", "", "", "", "", "", "", ""])
 
-    col_widths = [22 * mm, 62 * mm, 14 * mm, 52 * mm, 26 * mm, 26 * mm, 26 * mm, 28 * mm]
+    col_widths = [22 * mm, 52 * mm, 14 * mm, 42 * mm, 20 * mm, 30 * mm, 24 * mm, 24 * mm, 28 * mm]
     table = Table(data, colWidths=col_widths, repeatRows=1)
     table.setStyle(
         TableStyle(
@@ -353,7 +354,7 @@ def build_supplier_ledger_pdf(
                 ("ALIGN", (0, 0), (0, -1), "CENTER"),
                 ("ALIGN", (2, 0), (2, -1), "CENTER"),
                 ("ALIGN", (4, 0), (4, -1), "CENTER"),
-                ("ALIGN", (5, 0), (7, -1), "RIGHT"),
+                ("ALIGN", (6, 0), (8, -1), "RIGHT"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#adb5bd")),
                 ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f4f6f9")]),

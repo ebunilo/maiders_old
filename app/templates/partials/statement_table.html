@@ -6,6 +6,7 @@
       <th>Form</th>
       <th>Ref / Invoice</th>
       <th>Payment</th>
+      <th>Bank</th>
       <th class="text-end">Debit</th>
       <th class="text-end">Credit</th>
       <th class="text-end">Balance</th>
@@ -18,7 +19,8 @@
       <td>{{ t.details }}</td>
       <td><span class="badge text-bg-secondary">{{ t.form_id or '-' }}</span></td>
       <td class="small text-muted">{{ t.invoice_no or t.ref_no or '-' }}</td>
-      <td class="small">{{ t.payment_mode or '-' }}{% if t.bank_name %} / {{ t.bank_name }}{% endif %}</td>
+      <td class="small">{{ t.payment_mode or '-' }}</td>
+      <td class="small">{{ t.bank_name or '-' }}</td>
       <td class="text-end amount-dr">{% if t.amount_dr %}₦{{ t.amount_dr | money }}{% endif %}</td>
       <td class="text-end amount-cr">{% if t.amount_cr %}₦{{ t.amount_cr | money }}{% endif %}</td>
       <td class="text-end {% if running >= 0 %}balance-positive{% else %}balance-negative{% endif %}">
@@ -26,7 +28,7 @@
       </td>
     </tr>
   {% else %}
-    <tr><td colspan="8" class="text-center text-muted py-4">No transactions found.</td></tr>
+    <tr><td colspan="9" class="text-center text-muted py-4">No transactions found.</td></tr>
   {% endfor %}
   </tbody>
 </table>
