@@ -38,7 +38,7 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
           rsync -avz --delete \
-            --exclude=.git/ --exclude=.github/ --exclude=.venv/ --exclude=__pycache__/ --exclude=.env \
+            --exclude=.git/ --exclude=.github/ --exclude=.venv/ --exclude=__pycache__/ --exclude=.env --exclude="*.csv" \
             -e "ssh -p $SSH_PORT" \
             ./ "$SSH_USER@$SSH_HOST:$DEPLOY_PATH"
 
