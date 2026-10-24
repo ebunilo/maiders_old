@@ -303,6 +303,23 @@ personal SSH key.
    Then open <http://127.0.0.1:8000> for the UI, or
    <http://127.0.0.1:8000/docs> for the interactive API docs.
 
+## Running tests
+
+The suite (`tests/`) covers the debtors/creditors reports and their ageing
+split. It runs against a real PostgreSQL database that it wipes on every
+test, so it needs its own disposable one, named in `TEST_DATABASE_URL` (the
+name must end in `_test`; the app's `DATABASE_URL` is never used):
+
+```bash
+pip install -r requirements-dev.txt
+createdb maiders_test
+TEST_DATABASE_URL=postgresql+psycopg2://localhost:5432/maiders_test pytest
+```
+
+`tests/test_legacy_data.py` imports both legacy CSV exports and reconciles
+every report balance against the statement pages (about 40s); it is skipped
+if the CSVs aren't present.
+
 ## Data notes
 
 ### Customers
